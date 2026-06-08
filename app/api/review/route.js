@@ -88,7 +88,7 @@ If there are no issues, return an empty issues array. Only respond with JSON.`;
   }
 }
 
-function buildResult(owner, repo, pullNumber, reviewableFiles, fileReviews) {
+function buildResult(owner, repo, pullNumber, prTitle, reviewableFiles, fileReviews) {
   const scoredFiles = fileReviews.filter((f) => !f.skipped && f.score);
   const avgScore =
     scoredFiles.length > 0
@@ -115,7 +115,7 @@ function buildResult(owner, repo, pullNumber, reviewableFiles, fileReviews) {
   const warningCount = allIssues.filter((i) => i.severity === "warning").length;
 
   return {
-    pr: { owner, repo, pullNumber },
+    pr: { owner, repo, pullNumber, title: prTitle },
     filesReviewed: reviewableFiles.length,
     fileReviews,
     overallScore: avgScore,
@@ -153,10 +153,16 @@ export async function POST(request) {
       githubHeaders.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
     }
 
-    const githubRes = await fetch(
-      `${GITHUB_API_BASE}/repos/${owner}/${repo}/pulls/${pullNumber}/files`,
-      { headers: githubHeaders }
-    );
+    const [githubRes, prRes] = await Promise.all([
+      fetch(
+        `${GITHUB_API_BASE}/repos/${owner}/${repo}/pulls/${pullNumber}/files`,
+        { headers: githubHeaders }
+      ),
+      fetch(
+        `${GITHUB_API_BASE}/repos/${owner}/${repo}/pulls/${pullNumber}`,
+        { headers: githubHeaders }
+      ),
+    ]);
 
     if (!githubRes.ok) {
       return Response.json(
@@ -166,6 +172,8 @@ export async function POST(request) {
     }
 
     const files = await githubRes.json();
+    const prData = prRes.ok ? await prRes.json() : null;
+    const prTitle = prData?.title ?? `PR #${pullNumber}`;
     const reviewableFiles = files.filter(
       (f) => !skipPatterns.some((pattern) => pattern.test(f.filename))
     );
@@ -202,7 +210,14 @@ export async function POST(request) {
 
           send({
             type: "done",
-            ...buildResult(owner, repo, pullNumber, reviewableFiles, fileReviews),
+            ...buildResult(
+              owner,
+              repo,
+              pullNumber,
+              prTitle,
+              reviewableFiles,
+              fileReviews
+            ),
           });
         } catch (err) {
           send({ type: "error", error: err.message });

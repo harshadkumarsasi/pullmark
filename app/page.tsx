@@ -19,7 +19,7 @@ type FileReview = {
 };
 
 type ReviewResult = {
-  pr: { owner: string; repo: string; pullNumber: string };
+  pr: { owner: string; repo: string; pullNumber: string; title: string };
   filesReviewed: number;
   fileReviews: FileReview[];
   overallScore: { security: number; readability: number; performance: number };
@@ -31,22 +31,98 @@ type ReviewResult = {
   };
 };
 
+type HistoryEntry = {
+  id: string;
+  repoName: string;
+  title: string;
+  result: ReviewResult;
+  reviewedAt: number;
+};
+
 type StreamEvent =
   | { type: "progress"; files: string[]; filesReviewed: number }
   | { type: "fileComplete"; filename: string }
   | ({ type: "done" } & ReviewResult)
   | { type: "error"; error: string };
 
-const severityDot: Record<Issue["severity"], string> = {
-  critical: "bg-red-500",
-  warning: "bg-yellow-400",
-  info: "bg-blue-500",
+const HISTORY_KEY = "pr-review-history";
+
+const severityStyles: Record<Issue["severity"], string> = {
+  critical: "border-red-500/25 bg-red-500/10 text-red-300",
+  warning: "border-amber-400/25 bg-amber-400/10 text-amber-200",
+  info: "border-sky-400/25 bg-sky-400/10 text-sky-200",
 };
 
 function overallAverage(score: ReviewResult["overallScore"]) {
-  return Math.round(
-    (score.security + score.readability + score.performance) / 3
-  );
+  return (score.security + score.readability + score.performance) / 3;
+}
+
+function formatScore(score: number) {
+  return score.toFixed(1);
+}
+
+function scoreTone(score: number) {
+  if (score < 6) {
+    return "border-red-500/25 bg-red-500/10 text-red-300";
+  }
+
+  if (score <= 8) {
+    return "border-amber-400/25 bg-amber-400/10 text-amber-200";
+  }
+
+  return "border-emerald-400/25 bg-emerald-400/10 text-emerald-200";
+}
+
+function reviewUrl(result: ReviewResult) {
+  return `https://github.com/${result.pr.owner}/${result.pr.repo}/pull/${result.pr.pullNumber}`;
+}
+
+function formatDate(timestamp: number) {
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+  }).format(timestamp);
+}
+
+function historyId(result: ReviewResult) {
+  return `${result.pr.owner}/${result.pr.repo}#${result.pr.pullNumber}`;
+}
+
+function loadHistory(): HistoryEntry[] {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY);
+    return raw ? (JSON.parse(raw) as HistoryEntry[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveHistory(history: HistoryEntry[]) {
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+}
+
+function addToHistory(result: ReviewResult): HistoryEntry[] {
+  const entry: HistoryEntry = {
+    id: historyId(result),
+    repoName: `${result.pr.owner}/${result.pr.repo}`,
+    title: result.pr.title,
+    result,
+    reviewedAt: Date.now(),
+  };
+  const history = loadHistory().filter((h) => h.id !== entry.id);
+  const updated = [entry, ...history];
+  saveHistory(updated);
+  return updated;
+}
+
+function stripStreamType(event: { type: "done" } & ReviewResult): ReviewResult {
+  return {
+    pr: event.pr,
+    filesReviewed: event.filesReviewed,
+    fileReviews: event.fileReviews,
+    overallScore: event.overallScore,
+    summary: event.summary,
+  };
 }
 
 export default function Home() {
@@ -54,10 +130,29 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ReviewResult | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [history, setHistory] = useState<HistoryEntry[]>(() => {
+    if (typeof window === "undefined") return [];
+    return loadHistory();
+  });
   const [files, setFiles] = useState<string[]>([]);
   const [filesReviewed, setFilesReviewed] = useState(0);
   const [completedFiles, setCompletedFiles] = useState<string[]>([]);
   const [expandedFile, setExpandedFile] = useState<string | null>(null);
+
+  function handleNewReview() {
+    setResult(null);
+    setActiveId(null);
+    setExpandedFile(null);
+    setError(null);
+  }
+
+  function handleSelectHistory(entry: HistoryEntry) {
+    setResult(entry.result);
+    setActiveId(entry.id);
+    setExpandedFile(null);
+    setError(null);
+  }
 
   async function handleReview(e: React.FormEvent) {
     e.preventDefault();
@@ -66,6 +161,7 @@ export default function Home() {
     setLoading(true);
     setError(null);
     setResult(null);
+    setActiveId(null);
     setFiles([]);
     setFilesReviewed(0);
     setCompletedFiles([]);
@@ -107,8 +203,10 @@ export default function Home() {
           } else if (event.type === "fileComplete") {
             setCompletedFiles((prev) => [...prev, event.filename]);
           } else if (event.type === "done") {
-            const { type: _, ...reviewResult } = event;
+            const reviewResult = stripStreamType(event);
             setResult(reviewResult);
+            setActiveId(historyId(reviewResult));
+            setHistory(addToHistory(reviewResult));
           } else if (event.type === "error") {
             throw new Error(event.error);
           }
@@ -125,248 +223,320 @@ export default function Home() {
   const activeFile = files.find((f) => !completedSet.has(f));
 
   return (
-    <div className="flex min-h-full flex-col bg-zinc-50 font-sans dark:bg-zinc-950">
-      <nav className="border-b border-zinc-200 bg-white px-6 py-4 dark:border-zinc-800 dark:bg-zinc-900">
-        <span className="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-          PRReview
-        </span>
-      </nav>
+    <div className="flex min-h-screen bg-[#0a0a0a] font-sans text-zinc-100">
+      <aside className="flex min-h-screen w-[240px] shrink-0 flex-col border-r border-white/10 bg-[#0a0a0a]">
+        <div className="border-b border-white/10 p-4">
+          <button
+            type="button"
+            onClick={handleNewReview}
+            className="mb-5 flex w-full items-center gap-2 rounded-md px-1 py-1 text-left text-[15px] font-semibold tracking-tight text-white"
+          >
+            <span className="grid h-6 w-6 place-items-center rounded-md border border-white/10 bg-white text-xs font-bold text-black">
+              PR
+            </span>
+            PRReview
+          </button>
+          <button
+            type="button"
+            onClick={handleNewReview}
+            className="w-full rounded-md border border-white/10 bg-white px-3 py-2 text-sm font-medium text-zinc-950 shadow-[0_1px_0_rgba(255,255,255,0.12)_inset] transition-colors hover:bg-zinc-200"
+          >
+            New review
+          </button>
+        </div>
 
-      <main
-        className={`flex flex-1 flex-col px-6 py-16 ${
-          result ? "items-stretch" : "items-center justify-center"
-        }`}
-      >
-        {result ? (
-          <div className="mx-auto w-full max-w-3xl">
-            <div className="mb-8 flex items-center justify-between">
-              <div>
-                <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">
-                  Review Results
+        <div className="flex-1 overflow-y-auto p-2">
+          {history.length === 0 ? (
+            <p className="px-2 py-4 text-sm text-zinc-500">No reviews yet</p>
+          ) : (
+            <ul className="space-y-1">
+              {history.map((entry) => (
+                <li key={entry.id}>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectHistory(entry)}
+                    className={`w-full rounded-lg px-3 py-2.5 text-left transition-colors ${
+                      activeId === entry.id
+                        ? "border border-white/10 bg-white/[0.08]"
+                        : "border border-transparent hover:bg-white/[0.04]"
+                    }`}
+                  >
+                    <p className="truncate text-sm font-medium text-zinc-100">
+                      {entry.repoName}
+                    </p>
+                    <p className="mt-0.5 truncate text-xs text-zinc-500">
+                      {entry.title}
+                    </p>
+                    <p className="mt-2 text-[11px] uppercase tracking-[0.16em] text-zinc-600">
+                      {formatDate(entry.reviewedAt)}
+                    </p>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </aside>
+
+      <div className="flex min-h-screen flex-1 flex-col bg-[#0d0d0d] text-zinc-100">
+        <main
+          className={`flex flex-1 flex-col px-10 py-14 ${
+            result ? "items-stretch" : "items-center justify-center"
+          }`}
+        >
+          {result ? (
+            <div className="mx-auto w-full max-w-7xl">
+              <div className="mb-8">
+                <p className="mb-3 text-xs font-medium uppercase tracking-[0.18em] text-zinc-500">
+                  Review complete
+                </p>
+                <h1 className="max-w-4xl text-4xl font-semibold tracking-tight text-white">
+                  {result.pr.title}
                 </h1>
-                <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                  {result.pr.owner}/{result.pr.repo} #{result.pr.pullNumber}
+                <p className="mt-3 break-all font-mono text-sm text-zinc-500">
+                  {reviewUrl(result)}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setResult(null)}
-                className="text-sm font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50"
-              >
-                Review another PR
-              </button>
-            </div>
 
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              {(
-                [
-                  ["Security", result.overallScore.security],
-                  ["Readability", result.overallScore.readability],
-                  ["Performance", result.overallScore.performance],
-                  ["Overall", overallAverage(result.overallScore)],
-                ] as const
-              ).map(([label, score]) => (
-                <div
-                  key={label}
-                  className="rounded-lg border border-zinc-200 bg-white p-4 text-center dark:border-zinc-800 dark:bg-zinc-900"
-                >
-                  <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
-                    {label}
-                  </p>
-                  <p className="mt-1 text-3xl font-bold text-zinc-900 dark:text-zinc-50">
-                    {score}
-                    <span className="text-lg font-normal text-zinc-400">/10</span>
-                  </p>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-6 flex flex-wrap gap-2">
-              <span className="rounded-full bg-red-100 px-3 py-1 text-sm font-medium text-red-700 dark:bg-red-950 dark:text-red-400">
-                {result.summary.critical} critical
-              </span>
-              <span className="rounded-full bg-yellow-100 px-3 py-1 text-sm font-medium text-yellow-700 dark:bg-yellow-950 dark:text-yellow-400">
-                {result.summary.warnings} warnings
-              </span>
-              <span className="rounded-full bg-blue-100 px-3 py-1 text-sm font-medium text-blue-700 dark:bg-blue-950 dark:text-blue-400">
-                {result.summary.info} info
-              </span>
-            </div>
-
-            <div className="mt-8 space-y-3">
-              {result.fileReviews.map((file) => {
-                const isExpanded = expandedFile === file.filename;
-                const issueCount = file.issues?.length ?? 0;
-
-                return (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {(
+                  [
+                    ["Security", result.overallScore.security],
+                    ["Readability", result.overallScore.readability],
+                    ["Performance", result.overallScore.performance],
+                    ["Overall", overallAverage(result.overallScore)],
+                  ] as const
+                ).map(([label, score]) => (
                   <div
-                    key={file.filename}
-                    className="overflow-hidden rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900"
+                    key={label}
+                    className={`rounded-lg border p-4 shadow-sm ${scoreTone(score)}`}
                   >
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setExpandedFile(isExpanded ? null : file.filename)
-                      }
-                      className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
-                    >
-                      <span className="truncate font-mono text-sm font-medium text-zinc-900 dark:text-zinc-50">
-                        {file.filename}
+                    <p className="text-xs font-medium uppercase tracking-[0.16em] text-zinc-400">
+                      {label}
+                    </p>
+                    <p className="mt-3 text-4xl font-semibold tracking-tight">
+                      {formatScore(score)}
+                      <span className="ml-1 text-base font-medium text-zinc-400">
+                        /10
                       </span>
-                      <span className="ml-4 flex shrink-0 items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
-                        {issueCount} {issueCount === 1 ? "issue" : "issues"}
-                        <svg
-                          className={`h-4 w-4 transition-transform ${isExpanded ? "rotate-180" : ""}`}
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          strokeWidth={2}
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M19 9l-7 7-7-7"
-                          />
-                        </svg>
-                      </span>
-                    </button>
+                    </p>
+                  </div>
+                ))}
+              </div>
 
-                    {isExpanded && (
-                      <div className="border-t border-zinc-200 px-4 py-3 dark:border-zinc-800">
-                        {file.summary && (
-                          <p className="mb-3 text-sm text-zinc-600 dark:text-zinc-400">
-                            {file.summary}
-                          </p>
-                        )}
-                        {issueCount === 0 ? (
-                          <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                            No issues found.
-                          </p>
-                        ) : (
-                          <ul className="space-y-3">
-                            {file.issues!.map((issue, i) => (
-                              <li key={i} className="flex gap-3">
-                                <span
-                                  className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${severityDot[issue.severity]}`}
-                                />
-                                <div className="min-w-0">
-                                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
-                                    {issue.message}
+              <div className="mt-5 flex flex-wrap gap-2">
+                <span className="rounded-full border border-red-500/25 bg-red-500/10 px-3 py-1 text-sm font-medium text-red-300">
+                  Critical {result.summary.critical}
+                </span>
+                <span className="rounded-full border border-amber-400/25 bg-amber-400/10 px-3 py-1 text-sm font-medium text-amber-200">
+                  Warning {result.summary.warnings}
+                </span>
+                <span className="rounded-full border border-sky-400/25 bg-sky-400/10 px-3 py-1 text-sm font-medium text-sky-200">
+                  Info {result.summary.info}
+                </span>
+              </div>
+
+              <div className="mt-8 space-y-3">
+                {result.fileReviews.map((file) => {
+                  const isExpanded = expandedFile === file.filename;
+                  const issueCount = file.issues?.length ?? 0;
+
+                  return (
+                    <div
+                      key={file.filename}
+                      className="overflow-hidden rounded-lg border border-white/10 bg-[#1a1a1a] shadow-sm"
+                    >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedFile(isExpanded ? null : file.filename)
+                        }
+                        className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left hover:bg-white/[0.04]"
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate font-mono text-sm font-medium text-white">
+                            {file.filename}
+                          </span>
+                          {file.summary && (
+                            <span className="mt-1 block truncate text-sm text-zinc-400">
+                              {file.summary}
+                            </span>
+                          )}
+                        </span>
+                        <span className="flex shrink-0 items-center gap-3 text-sm text-zinc-400">
+                          <span>
+                            {issueCount}{" "}
+                            {issueCount === 1 ? "issue" : "issues"}
+                          </span>
+                          <svg
+                            className={`h-4 w-4 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M19 9l-7 7-7-7"
+                            />
+                          </svg>
+                        </span>
+                      </button>
+
+                      {isExpanded && (
+                        <div className="border-t border-white/10 bg-[#111111] px-4 py-4">
+                          {issueCount === 0 ? (
+                            <p className="text-sm text-zinc-400">
+                              No issues found.
+                            </p>
+                          ) : (
+                            <ul className="space-y-3">
+                              {file.issues!.map((issue, i) => (
+                                <li
+                                  key={i}
+                                  className="rounded-md border border-white/10 bg-[#1a1a1a] p-4"
+                                >
+                                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                                    <span
+                                      className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] ${severityStyles[issue.severity]}`}
+                                    >
+                                      {issue.severity} · {issue.category}
+                                    </span>
                                     {issue.line != null && (
-                                      <span className="ml-2 font-normal text-zinc-400">
+                                      <span className="font-mono text-xs text-zinc-500">
                                         line {issue.line}
                                       </span>
                                     )}
-                                  </p>
-                                  <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-                                    {issue.category}
-                                  </p>
-                                  {issue.suggestion && (
-                                    <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
-                                      {issue.suggestion}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-medium leading-6 text-white">
+                                      {issue.message}
                                     </p>
-                                  )}
-                                </div>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ) : (
-          <div className="w-full max-w-xl text-center">
-            <h1 className="text-4xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-5xl">
-              AI code review for any GitHub PR
-            </h1>
-
-            <form
-              onSubmit={handleReview}
-              className="mt-10 flex flex-col gap-3 sm:flex-row"
-            >
-              <input
-                type="url"
-                value={prUrl}
-                onChange={(e) => setPrUrl(e.target.value)}
-                placeholder="https://github.com/owner/repo/pull/123"
-                required
-                disabled={loading}
-                className="flex-1 rounded-lg border border-zinc-300 bg-white px-4 py-3 text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-500/20 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50 dark:placeholder:text-zinc-500"
-              />
-              <button
-                type="submit"
-                disabled={loading}
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-zinc-900 px-6 py-3 font-medium text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
-              >
-                {loading && (
-                  <svg
-                    className="h-5 w-5 animate-spin"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    aria-hidden="true"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    />
-                  </svg>
-                )}
-                Review PR
-              </button>
-            </form>
-
-            {error && (
-              <p className="mt-4 text-sm text-red-600 dark:text-red-400">
-                {error}
-              </p>
-            )}
-
-            {loading && files.length > 0 && (
-              <div className="mt-10 text-left">
-                <p className="mb-3 text-sm font-medium text-zinc-500 dark:text-zinc-400">
-                  Reviewing {files.length} of {filesReviewed} files
-                </p>
-                <ul className="space-y-2 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-                  {files.map((filename) => {
-                    const isComplete = completedSet.has(filename);
-                    const isActive = filename === activeFile;
-
-                    return (
-                      <li
-                        key={filename}
-                        className="flex items-center gap-3 font-mono text-sm text-zinc-700 dark:text-zinc-300"
-                      >
-                        {isComplete ? (
-                          <span className="h-2 w-2 shrink-0 rounded-full bg-green-500" />
-                        ) : isActive ? (
-                          <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-blue-500" />
-                        ) : (
-                          <span className="h-2 w-2 shrink-0 rounded-full bg-zinc-300 dark:bg-zinc-600" />
-                        )}
-                        <span className="truncate">{filename}</span>
-                      </li>
-                    );
-                  })}
-                </ul>
+                                    {issue.suggestion && (
+                                      <p className="mt-2 text-sm leading-6 text-zinc-300">
+                                        {issue.suggestion}
+                                      </p>
+                                    )}
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-            )}
-          </div>
-        )}
-      </main>
+            </div>
+          ) : (
+            <div className="w-full max-w-5xl">
+              <div className="text-center">
+                <p className="mb-4 text-xs font-medium uppercase tracking-[0.2em] text-zinc-500">
+                  Structured AI review for GitHub pull requests
+                </p>
+                <h1 className="text-5xl font-semibold tracking-tight text-white sm:text-6xl">
+                  Drop a PR URL.
+                </h1>
+                <p className="mx-auto mt-6 max-w-2xl text-base leading-7 text-zinc-300 sm:text-lg">
+                  Get a focused review across security, readability, and
+                  performance with file-level findings ready for triage.
+                </p>
+              </div>
+
+              <form
+                onSubmit={handleReview}
+                className="mx-auto mt-12 flex max-w-4xl overflow-hidden rounded-lg border border-white/10 bg-[#1a1a1a] p-1.5 shadow-sm focus-within:border-white/20 focus-within:ring-4 focus-within:ring-white/5"
+              >
+                <input
+                  type="url"
+                  value={prUrl}
+                  onChange={(e) => setPrUrl(e.target.value)}
+                  placeholder="https://github.com/owner/repo/pull/123"
+                  required
+                  disabled={loading}
+                  className="min-w-0 flex-1 bg-transparent px-5 py-4 font-mono text-sm text-white outline-none placeholder:text-zinc-500 disabled:opacity-50"
+                />
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-white px-6 py-4 text-sm font-medium text-black transition-colors hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {loading && (
+                    <svg
+                      className="h-4 w-4 animate-spin"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      aria-hidden="true"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      />
+                    </svg>
+                  )}
+                  Review PR →
+                </button>
+              </form>
+
+              <div className="mx-auto mt-9 flex max-w-4xl flex-wrap justify-center gap-x-10 gap-y-3 text-center font-mono text-xs font-medium uppercase tracking-[0.12em] text-[#666]">
+                <p className="whitespace-nowrap">MAX FILES / PR: 30</p>
+                <p className="whitespace-nowrap">
+                  CATEGORIES: Security · Read · Perf
+                </p>
+                <p className="whitespace-nowrap">OUTPUT: JSON · structured</p>
+              </div>
+
+              {error && (
+                <p className="mt-5 rounded-md border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                  {error}
+                </p>
+              )}
+
+              {loading && files.length > 0 && (
+                <div className="mt-10 text-left">
+                  <p className="mb-3 text-sm font-medium text-zinc-400">
+                    Reviewing {files.length} of {filesReviewed} files
+                  </p>
+                  <ul className="space-y-2 rounded-lg border border-white/10 bg-[#1a1a1a] p-4 shadow-sm">
+                    {files.map((filename) => {
+                      const isComplete = completedSet.has(filename);
+                      const isActive = filename === activeFile;
+
+                      return (
+                        <li
+                          key={filename}
+                          className="flex items-center gap-3 font-mono text-sm text-zinc-300"
+                        >
+                          {isComplete ? (
+                            <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
+                          ) : isActive ? (
+                            <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-white" />
+                          ) : (
+                            <span className="h-2 w-2 shrink-0 rounded-full bg-zinc-600" />
+                          )}
+                          <span className="truncate">{filename}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </main>
+      </div>
     </div>
   );
 }
