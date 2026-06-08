@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 
 type Issue = {
   line: string | number | null;
@@ -46,6 +46,10 @@ type StreamEvent =
   | { type: "error"; error: string };
 
 const HISTORY_KEY = "pr-review-history";
+const HISTORY_CHANGE_EVENT = "pr-review-history-change";
+const EMPTY_HISTORY: HistoryEntry[] = [];
+let cachedHistoryRaw: string | null = null;
+let cachedHistorySnapshot: HistoryEntry[] = EMPTY_HISTORY;
 
 const severityStyles: Record<Issue["severity"], string> = {
   critical: "border-red-500/25 bg-red-500/10 text-red-300",
@@ -90,15 +94,40 @@ function historyId(result: ReviewResult) {
 
 function loadHistory(): HistoryEntry[] {
   try {
+    if (typeof window === "undefined") return EMPTY_HISTORY;
+
     const raw = localStorage.getItem(HISTORY_KEY);
-    return raw ? (JSON.parse(raw) as HistoryEntry[]) : [];
+    if (raw === cachedHistoryRaw) return cachedHistorySnapshot;
+
+    cachedHistoryRaw = raw;
+    cachedHistorySnapshot = raw
+      ? (JSON.parse(raw) as HistoryEntry[])
+      : EMPTY_HISTORY;
+    return cachedHistorySnapshot;
   } catch {
-    return [];
+    cachedHistoryRaw = null;
+    cachedHistorySnapshot = EMPTY_HISTORY;
+    return cachedHistorySnapshot;
   }
 }
 
 function saveHistory(history: HistoryEntry[]) {
   localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+  window.dispatchEvent(new Event(HISTORY_CHANGE_EVENT));
+}
+
+function subscribeHistory(callback: () => void) {
+  window.addEventListener("storage", callback);
+  window.addEventListener(HISTORY_CHANGE_EVENT, callback);
+
+  return () => {
+    window.removeEventListener("storage", callback);
+    window.removeEventListener(HISTORY_CHANGE_EVENT, callback);
+  };
+}
+
+function getServerHistorySnapshot() {
+  return EMPTY_HISTORY;
 }
 
 function addToHistory(result: ReviewResult): HistoryEntry[] {
@@ -131,10 +160,11 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ReviewResult | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [history, setHistory] = useState<HistoryEntry[]>(() => {
-    if (typeof window === "undefined") return [];
-    return loadHistory();
-  });
+  const history = useSyncExternalStore(
+    subscribeHistory,
+    loadHistory,
+    getServerHistorySnapshot
+  );
   const [files, setFiles] = useState<string[]>([]);
   const [filesReviewed, setFilesReviewed] = useState(0);
   const [completedFiles, setCompletedFiles] = useState<string[]>([]);
@@ -206,7 +236,7 @@ export default function Home() {
             const reviewResult = stripStreamType(event);
             setResult(reviewResult);
             setActiveId(historyId(reviewResult));
-            setHistory(addToHistory(reviewResult));
+            addToHistory(reviewResult);
           } else if (event.type === "error") {
             throw new Error(event.error);
           }
