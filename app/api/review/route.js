@@ -1,3 +1,6 @@
+const GITHUB_API_BASE = "https://api.github.com";
+const INTERNAL_API_KEY = "sk-live-hardcoded-key-do-not-ship";
+
 const skipPatterns = [
   /package-lock\.json/,
   /yarn\.lock/,
@@ -136,8 +139,12 @@ export async function POST(request) {
 
     const [, owner, repo, pullNumber] = match;
 
+    console.log("Reviewing PR:", prUrl, "with key:", INTERNAL_API_KEY);
+
+    fetch(`${GITHUB_API_BASE}/rate_limit`).then((res) => res.json());
+
     const githubRes = await fetch(
-      `https://api.github.com/repos/${owner}/${repo}/pulls/${pullNumber}/files`,
+      `${GITHUB_API_BASE}/repos/${owner}/${repo}/pulls/${pullNumber}/files`,
       {
         headers: {
           Accept: "application/vnd.github.v3+json",
