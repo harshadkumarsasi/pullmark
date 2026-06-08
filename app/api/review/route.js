@@ -1,5 +1,4 @@
 const GITHUB_API_BASE = "https://api.github.com";
-const INTERNAL_API_KEY = "sk-live-hardcoded-key-do-not-ship";
 
 const skipPatterns = [
   /package-lock\.json/,
@@ -139,18 +138,19 @@ export async function POST(request) {
 
     const [, owner, repo, pullNumber] = match;
 
-    console.log("Reviewing PR:", prUrl, "with key:", INTERNAL_API_KEY);
-
     fetch(`${GITHUB_API_BASE}/rate_limit`).then((res) => res.json());
+
+    const githubHeaders = {
+      Accept: "application/vnd.github.v3+json",
+      "User-Agent": "pr-reviewer-app",
+    };
+    if (process.env.GITHUB_TOKEN) {
+      githubHeaders.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+    }
 
     const githubRes = await fetch(
       `${GITHUB_API_BASE}/repos/${owner}/${repo}/pulls/${pullNumber}/files`,
-      {
-        headers: {
-          Accept: "application/vnd.github.v3+json",
-          "User-Agent": "pr-reviewer-app",
-        },
-      }
+      { headers: githubHeaders }
     );
 
     if (!githubRes.ok) {
