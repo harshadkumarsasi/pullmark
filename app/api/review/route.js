@@ -48,18 +48,23 @@ Review this diff and respond ONLY with a valid JSON object in this exact format,
 If there are no issues, return an empty issues array. Only respond with JSON.`;
 
   try {
-    const ollamaRes = await fetch("http://localhost:11434/api/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "qwen2.5-coder:7b",
-        prompt: prompt,
-        stream: false,
-      }),
-    });
+    const groqRes = await fetch(
+      "https://api.groq.com/openai/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: "llama-3.1-8b-instant",
+          messages: [{ role: "user", content: prompt }],
+        }),
+      }
+    );
 
-    const ollamaData = await ollamaRes.json();
-    const rawText = ollamaData.response;
+    const groqData = await groqRes.json();
+    const rawText = groqData.choices[0].message.content;
 
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
