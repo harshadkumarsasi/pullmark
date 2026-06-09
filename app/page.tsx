@@ -313,6 +313,10 @@ export default function Home() {
           className={`flex flex-1 flex-col px-10 py-14 ${
             result ? "items-stretch" : "items-center justify-center"
           }`}
+          style={{
+            backgroundImage: "radial-gradient(circle, #333 1px, transparent 1px)",
+            backgroundSize: "32px 32px",
+          }}
         >
           {result ? (
             <div className="mx-auto w-full max-w-7xl">
