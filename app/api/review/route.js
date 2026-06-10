@@ -576,6 +576,7 @@ export async function POST(request) {
             fileReviews
           );
 
+          let savedReviewId = null;
           try {
             const overallScore = Math.round(
               (result.overallScore.security +
@@ -584,7 +585,7 @@ export async function POST(request) {
                 3
             );
 
-            await prisma.review.create({
+            const savedReview = await prisma.review.create({
               data: {
                 userId: user.id,
                 prUrl,
@@ -614,12 +615,15 @@ export async function POST(request) {
                 },
               },
             });
+
+            savedReviewId = savedReview.id;
           } catch (dbError) {
             console.error("Failed to save review record", dbError);
           }
 
           send({
             type: "done",
+            reviewId: savedReviewId,
             ...result,
           });
         } catch (err) {

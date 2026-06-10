@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { signOut } from "next-auth/react";
 
 type ReviewScore = {
@@ -32,6 +32,7 @@ type ReviewResult = {
     pullNumber: string;
     title: string;
   };
+  reviewId?: string;
   filesReviewed: number;
   fileReviews: FileReview[];
   overallScore: ReviewScore;
@@ -97,6 +98,9 @@ export default function DashboardPage() {
   const [completedSet, setCompletedSet] = useState<Set<string>>(new Set());
   const [activeFile, setActiveFile] = useState<string | null>(null);
   const [usingStaticGithubToken, setUsingStaticGithubToken] = useState<boolean | null>(null);
+  const [shareMessage, setShareMessage] = useState<string | null>(null);
+  const [currentReviewId, setCurrentReviewId] = useState<string | null>(null);
+  const shareResetTimeout = useRef<number | null>(null);
 
   useEffect(() => {
     refreshHistory();
@@ -118,14 +122,33 @@ export default function DashboardPage() {
     }
   }
 
-  function handleSelectHistory(entry: HistoryEntry) {
+  async function handleSelectHistory(entry: HistoryEntry) {
     setActiveId(entry.id);
-    setResult(entry.result);
+    setError(null);
+    setShareMessage(null);
+    if (shareResetTimeout.current) {
+      window.clearTimeout(shareResetTimeout.current);
+      shareResetTimeout.current = null;
+    }
+
+    try {
+      const reviewResult = await loadReviewById(entry.id)
+      setResult(reviewResult)
+      setCurrentReviewId(entry.id)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
   }
 
   function handleNewReview() {
     setActiveId(null);
     setResult(null);
+    setCurrentReviewId(null);
+    setShareMessage(null);
+    if (shareResetTimeout.current) {
+      window.clearTimeout(shareResetTimeout.current);
+      shareResetTimeout.current = null;
+    }
     setError(null);
   }
 
@@ -137,6 +160,7 @@ export default function DashboardPage() {
     setCompletedSet(new Set());
     setFilesReviewed(0);
     setActiveFile(null);
+    setShareMessage(null);
     setLoading(true);
 
     try {
@@ -187,8 +211,9 @@ export default function DashboardPage() {
               setActiveFile(event.filename);
             }
 
-            if (event.type === "done") {
+                  if (event.type === "done") {
               setResult(event);
+              setCurrentReviewId(event.reviewId ?? null);
               await refreshHistory();
             }
 
@@ -204,6 +229,68 @@ export default function DashboardPage() {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadReviewById(id: string) {
+    const response = await fetch(`/api/review/${id}`, { cache: "no-store" })
+    if (!response.ok) {
+      throw new Error("Unable to load review.")
+    }
+
+    const review = await response.json()
+
+    return {
+      pr: {
+        owner: review.prOwner,
+        repo: review.prRepo,
+        pullNumber: review.prNumber,
+        title: review.prTitle ?? `PR #${review.prNumber}`,
+      },
+      filesReviewed: review.filesReviewed,
+      fileReviews: review.fileResults.map((file: any) => ({
+        filename: file.filename,
+        summary: file.summary,
+        issues: file.issues ?? [],
+        score: {
+          security: file.securityScore ?? 0,
+          readability: file.readabilityScore ?? 0,
+          performance: file.performanceScore ?? 0,
+        },
+        skipped: file.skipped,
+      })),
+      overallScore: {
+        security: review.securityScore,
+        readability: review.readabilityScore,
+        performance: review.performanceScore,
+      },
+      summary: {
+        totalIssues: review.totalIssues,
+        critical: review.criticalCount,
+        warnings: review.warningCount,
+        info: review.infoCount,
+      },
+    }
+  }
+
+  async function copyReviewLink() {
+    if (!currentReviewId) return;
+
+    const shareUrl = `${window.location.origin}/review/${currentReviewId}`
+
+    try {
+      await navigator.clipboard.writeText(shareUrl)
+      setShareMessage("Review link copied to clipboard.")
+      if (shareResetTimeout.current) {
+        window.clearTimeout(shareResetTimeout.current);
+      }
+      shareResetTimeout.current = window.setTimeout(() => {
+        setShareMessage(null)
+        shareResetTimeout.current = null
+      }, 3000)
+    } catch (err) {
+      setShareMessage("Unable to copy link. Please copy it manually.")
+      console.error(err)
     }
   }
 
@@ -337,6 +424,21 @@ export default function DashboardPage() {
                   Info {result.summary.info}
                 </span>
               </div>
+
+              {currentReviewId && (
+                <div className="mt-5 flex flex-col items-start gap-2 sm:flex-row sm:items-center">
+                  <button
+                    type="button"
+                    onClick={copyReviewLink}
+                    className="rounded-md bg-white px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-zinc-200"
+                  >
+                    Share this review
+                  </button>
+                  {shareMessage && (
+                    <p className="text-sm text-zinc-400">{shareMessage}</p>
+                  )}
+                </div>
+              )}
 
               <div className="mt-8 space-y-3">
                 {result.fileReviews.map((file) => {
