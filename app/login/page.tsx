@@ -25,13 +25,22 @@ export default function LoginPage() {
             >
               Sign in with GitHub
             </button>
-            <button
-              type="button"
-              onClick={() => signIn("google")}
-              className="flex w-full items-center justify-center gap-3 rounded-2xl border border-white/10 bg-white/10 px-5 py-4 text-sm font-semibold text-white transition hover:border-white/20 hover:bg-white/15"
-            >
-              Sign in with Google
-            </button>
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => signIn("google")}
+                className="flex w-full items-center justify-center gap-3 rounded-2xl border border-white/10 bg-white/10 px-5 py-4 text-sm font-semibold text-white transition hover:border-white/20 hover:bg-white/15"
+              >
+                Sign in with Google
+              </button>
+              <button
+                type="button"
+                onClick={() => signIn("google", {}, { prompt: "select_account" })}
+                className="text-xs text-zinc-400 underline-offset-4 transition hover:text-white"
+              >
+                Use a different Google account
+              </button>
+            </div>
           </div>
         </div>
       </div>

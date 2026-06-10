@@ -245,26 +245,65 @@ function relevantProjectFiles(fileTree, filename) {
   return [...selected].slice(0, MAX_PROJECT_TREE_FILES);
 }
 
-function responseFormatInstructions() {
-  return `Review this diff and respond ONLY with a valid JSON object in this exact format, no other text:
+function detectProjectType(fileTree) {
+  if (!Array.isArray(fileTree)) return "unknown";
+  if (fileTree.includes("package.json")) return "node";
+  if (fileTree.includes("pyproject.toml")) return "python";
+  if (fileTree.includes("pom.xml")) return "java";
+  if (fileTree.includes("go.mod")) return "go";
+  if (fileTree.includes("Cargo.toml")) return "rust";
+  return "unknown";
+}
+
+function buildSystemPrompt(file, context) {
+  const projectType = detectProjectType(context.fileTree);
+  const codingStandards = formatCodingStandards(context.codingStandards);
+  const surroundingContext = formatSurroundingContext(context.surroundingContext);
+
+  return `You are a senior software engineer doing a precise code review.
+You are reviewing a single file's diff from a GitHub pull request.
+
+STRICT RULES:
+- You MAY return zero findings. Prefer zero findings over weak findings.
+- Only flag something if there is a concrete bug risk, security issue, 
+  performance problem, or backwards compatibility concern.
+- NEVER restate what changed as a finding.
+- NEVER create a finding where the suggested_fix repeats the explanation.
+- NEVER flag style preferences or generic advice.
+- Every finding must reference a specific line or pattern from the diff.
+- Add a confidence score 0.0-1.0 to every finding.
+
+File: ${file.filename}
+Project type detected from file tree: ${projectType}
+Coding standards found: ${codingStandards}
+Surrounding context: ${surroundingContext}
+
+Diff:
+${file.patch}
+
+Respond ONLY with valid JSON in this exact format, no other text:
 {
-  "issues": [
+  "findings": [
     {
-      "line": "approximate line number or null",
-      "severity": "critical or warning or info",
-      "category": "bug or security or performance or style",
-      "message": "clear description of the issue",
-      "suggestion": "how to fix it"
+      "title": "short specific title",
+      "category": "bug|security|performance|compatibility",
+      "severity": "critical|warning|info",
+      "confidence": 0.85,
+      "explanation": "specific explanation referencing the actual code change",
+      "suggested_fix": "concrete fix, or empty string if none"
     }
   ],
-  "summary": "one sentence summary of what this file change does",
+  "summary": "one sentence describing what this file change does",
   "score": {
     "security": 8,
     "readability": 7,
     "performance": 8
   }
 }
-If there are no issues, return an empty issues array. Only respond with JSON.`;
+
+After generating findings, filter out any finding where confidence < 0.75.
+If all findings are filtered, return findings as an empty array.
+Only respond with JSON.`;
 }
 
 function buildDiffOnlyPrompt(file) {
@@ -276,7 +315,7 @@ Status: ${file.status} (${file.additions} additions, ${file.deletions} deletions
 Here is the diff (lines starting with + are added, - are removed):
 ${file.patch}
 
-${responseFormatInstructions()}`;
+${buildSystemPrompt(file, { fileTree: [], codingStandards: [], surroundingContext: [] })}`;
 }
 
 function buildContextPrompt(file, context) {
@@ -302,7 +341,7 @@ ${formatRelatedFiles(context.relatedFiles)}
 Here is the diff (lines starting with + are added, - are removed):
 ${file.patch}
 
-${responseFormatInstructions()}`;
+${buildSystemPrompt(file, context)}`;
 }
 
 function promptForFile(file, context) {
@@ -312,6 +351,75 @@ function promptForFile(file, context) {
   return buildDiffOnlyPrompt(file);
 }
 
+function normalizeFindings(parsed) {
+  if (typeof parsed !== "object" || parsed === null) {
+    throw new Error("AI returned invalid JSON");
+  }
+
+  const normalizeText = (s) =>
+    typeof s === "string" ? s.replace(/\s+/g, " ").trim() : "";
+
+  const normalizeKey = (k) => (k === undefined || k === null ? "" : k);
+
+  const isSubstantiallyIdentical = (a, b) => {
+    const na = normalizeText(a).toLowerCase().replace(/[^a-z0-9 ]/g, "");
+    const nb = normalizeText(b).toLowerCase().replace(/[^a-z0-9 ]/g, "");
+    if (!na || !nb) return false;
+    return na === nb || na.includes(nb) || nb.includes(na);
+  };
+
+  const rawFindings = Array.isArray(parsed.findings)
+    ? parsed.findings
+    : Array.isArray(parsed.issues)
+    ? parsed.issues
+    : [];
+
+  const issues = rawFindings
+    .map((f) => {
+      if (typeof f !== "object" || f === null) return null;
+      const confidence = Number(f.confidence) || 0;
+      if (confidence < 0.75) return null;
+
+      const title = normalizeText(normalizeKey(f.title || f.message));
+      const explanation = normalizeText(normalizeKey(f.explanation || f.message));
+
+      if (!title || !explanation) return null;
+      if (isSubstantiallyIdentical(title, explanation)) return null;
+
+      return {
+        line: typeof f.line === "number" ? f.line : null,
+        severity: typeof f.severity === "string" ? f.severity : "info",
+        category: typeof f.category === "string" ? f.category : "maintainability",
+        title: normalizeKey(f.title || f.message),
+        explanation: normalizeKey(f.explanation || f.message),
+        why_it_matters: typeof f.why_it_matters === "string" ? f.why_it_matters : "",
+        suggested_fix: typeof f.suggested_fix === "string" ? f.suggested_fix : "",
+        example_code: typeof f.example_code === "string" ? f.example_code : "",
+        confidence,
+      };
+    })
+    .filter(Boolean);
+
+  const score =
+    typeof parsed.score === "object" && parsed.score !== null
+      ? {
+          security: Number(parsed.score.security) || 0,
+          readability: Number(parsed.score.readability) || 0,
+          performance: Number(parsed.score.performance) || 0,
+        }
+      : { security: 0, readability: 0, performance: 0 };
+
+  const summary =
+    typeof parsed.summary === "string" && parsed.summary.trim().length > 0
+      ? parsed.summary.trim()
+      : issues.length === 0
+      ? "No significant concerns detected."
+      : "";
+
+  // Map findings -> issues for backward compatibility with the UI
+  return { issues, score, summary };
+}
+
 function parseReviewResponse(rawText) {
   const jsonMatch = rawText.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
@@ -319,7 +427,8 @@ function parseReviewResponse(rawText) {
   }
 
   try {
-    return JSON.parse(jsonMatch[0]);
+    const parsed = JSON.parse(jsonMatch[0]);
+    return normalizeFindings(parsed);
   } catch {
     throw new Error("AI returned invalid JSON");
   }
