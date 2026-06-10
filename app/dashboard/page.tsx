@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { signOut } from "next-auth/react";
 
 type ReviewScore = {
@@ -13,16 +13,8 @@ type ReviewIssue = {
   line: number | null;
   severity: "critical" | "warning" | "info";
   category: string;
-  title?: string;
-  message?: string;
-  explanation?: string;
-  why_it_matters?: string;
-  whyItMatters?: string;
-  suggested_fix?: string;
-  suggestedFix?: string;
-  suggestion?: string;
-  example_code?: string;
-  exampleCode?: string;
+  message: string;
+  suggestion: string;
 };
 
 type FileReview = {
@@ -104,6 +96,7 @@ export default function DashboardPage() {
   const [filesReviewed, setFilesReviewed] = useState(0);
   const [completedSet, setCompletedSet] = useState<Set<string>>(new Set());
   const [activeFile, setActiveFile] = useState<string | null>(null);
+  const [usingStaticGithubToken, setUsingStaticGithubToken] = useState<boolean | null>(null);
 
   useEffect(() => {
     refreshHistory();
@@ -184,6 +177,9 @@ export default function DashboardPage() {
             if (event.type === "progress") {
               setFiles(event.files || []);
               setFilesReviewed(event.filesReviewed ?? 0);
+              if (typeof event.usingStaticGithubToken !== "undefined") {
+                setUsingStaticGithubToken(Boolean(event.usingStaticGithubToken));
+              }
             }
 
             if (event.type === "fileComplete") {
@@ -305,6 +301,12 @@ export default function DashboardPage() {
                 <p className="mt-3 break-all font-mono text-sm text-zinc-500">{reviewUrl(result)}</p>
               </div>
 
+              {usingStaticGithubToken === true && (
+                <div className="mx-auto mt-6 max-w-4xl rounded-md border border-yellow-500/20 bg-yellow-500/5 px-4 py-3 text-sm text-amber-200">
+                  Note: using the static GitHub token. Private repositories require signing in with GitHub to review.
+                </div>
+              )}
+
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 {(
                   [
@@ -394,30 +396,9 @@ export default function DashboardPage() {
                                     )}
                                   </div>
                                   <div className="min-w-0">
-                                    <p className="text-sm font-semibold leading-6 text-white">
-                                      {issue.title ?? issue.message ?? "Untitled issue"}
-                                    </p>
-                                    {(issue.explanation ?? issue.message) && (
-                                      <p className="mt-2 text-sm leading-6 text-zinc-300">
-                                        {issue.explanation ?? issue.message}
-                                      </p>
-                                    )}
-                                    {(issue.why_it_matters ?? issue.whyItMatters) && (
-                                      <p className="mt-2 text-sm leading-6 text-zinc-400">
-                                        <span className="font-semibold text-zinc-200">Why it matters:</span>{" "}
-                                        {issue.why_it_matters ?? issue.whyItMatters}
-                                      </p>
-                                    )}
-                                    {(issue.suggested_fix ?? issue.suggestion ?? issue.suggestedFix) && (
-                                      <p className="mt-2 text-sm leading-6 text-zinc-300">
-                                        <span className="font-semibold text-zinc-200">Suggested fix:</span>{" "}
-                                        {issue.suggested_fix ?? issue.suggestedFix ?? issue.suggestion}
-                                      </p>
-                                    )}
-                                    {(issue.example_code ?? issue.exampleCode) && (
-                                      <pre className="mt-3 overflow-x-auto rounded-md border border-white/10 bg-[#0f0f0f] p-3 text-xs text-zinc-200">
-                                        <code>{issue.example_code ?? issue.exampleCode}</code>
-                                      </pre>
+                                    <p className="text-sm font-medium leading-6 text-white">{issue.message}</p>
+                                    {issue.suggestion && (
+                                      <p className="mt-2 text-sm leading-6 text-zinc-300">{issue.suggestion}</p>
                                     )}
                                   </div>
                                 </li>

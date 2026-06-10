@@ -1,3 +1,6 @@
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+
 const GITHUB_API_BASE = "https://api.github.com";
 
 const skipPatterns = [
@@ -245,65 +248,26 @@ function relevantProjectFiles(fileTree, filename) {
   return [...selected].slice(0, MAX_PROJECT_TREE_FILES);
 }
 
-function detectProjectType(fileTree) {
-  if (!Array.isArray(fileTree)) return "unknown";
-  if (fileTree.includes("package.json")) return "node";
-  if (fileTree.includes("pyproject.toml")) return "python";
-  if (fileTree.includes("pom.xml")) return "java";
-  if (fileTree.includes("go.mod")) return "go";
-  if (fileTree.includes("Cargo.toml")) return "rust";
-  return "unknown";
-}
-
-function buildSystemPrompt(file, context) {
-  const projectType = detectProjectType(context.fileTree);
-  const codingStandards = formatCodingStandards(context.codingStandards);
-  const surroundingContext = formatSurroundingContext(context.surroundingContext);
-
-  return `You are a senior software engineer doing a precise code review.
-You are reviewing a single file's diff from a GitHub pull request.
-
-STRICT RULES:
-- You MAY return zero findings. Prefer zero findings over weak findings.
-- Only flag something if there is a concrete bug risk, security issue, 
-  performance problem, or backwards compatibility concern.
-- NEVER restate what changed as a finding.
-- NEVER create a finding where the suggested_fix repeats the explanation.
-- NEVER flag style preferences or generic advice.
-- Every finding must reference a specific line or pattern from the diff.
-- Add a confidence score 0.0-1.0 to every finding.
-
-File: ${file.filename}
-Project type detected from file tree: ${projectType}
-Coding standards found: ${codingStandards}
-Surrounding context: ${surroundingContext}
-
-Diff:
-${file.patch}
-
-Respond ONLY with valid JSON in this exact format, no other text:
+function responseFormatInstructions() {
+  return `Review this diff and respond ONLY with a valid JSON object in this exact format, no other text:
 {
-  "findings": [
+  "issues": [
     {
-      "title": "short specific title",
-      "category": "bug|security|performance|compatibility",
-      "severity": "critical|warning|info",
-      "confidence": 0.85,
-      "explanation": "specific explanation referencing the actual code change",
-      "suggested_fix": "concrete fix, or empty string if none"
+      "line": "approximate line number or null",
+      "severity": "critical or warning or info",
+      "category": "bug or security or performance or style",
+      "message": "clear description of the issue",
+      "suggestion": "how to fix it"
     }
   ],
-  "summary": "one sentence describing what this file change does",
+  "summary": "one sentence summary of what this file change does",
   "score": {
     "security": 8,
     "readability": 7,
     "performance": 8
   }
 }
-
-After generating findings, filter out any finding where confidence < 0.75.
-If all findings are filtered, return findings as an empty array.
-Only respond with JSON.`;
+If there are no issues, return an empty issues array. Only respond with JSON.`;
 }
 
 function buildDiffOnlyPrompt(file) {
@@ -315,7 +279,7 @@ Status: ${file.status} (${file.additions} additions, ${file.deletions} deletions
 Here is the diff (lines starting with + are added, - are removed):
 ${file.patch}
 
-${buildSystemPrompt(file, { fileTree: [], codingStandards: [], surroundingContext: [] })}`;
+${responseFormatInstructions()}`;
 }
 
 function buildContextPrompt(file, context) {
@@ -341,7 +305,7 @@ ${formatRelatedFiles(context.relatedFiles)}
 Here is the diff (lines starting with + are added, - are removed):
 ${file.patch}
 
-${buildSystemPrompt(file, context)}`;
+${responseFormatInstructions()}`;
 }
 
 function promptForFile(file, context) {
@@ -351,75 +315,6 @@ function promptForFile(file, context) {
   return buildDiffOnlyPrompt(file);
 }
 
-function normalizeFindings(parsed) {
-  if (typeof parsed !== "object" || parsed === null) {
-    throw new Error("AI returned invalid JSON");
-  }
-
-  const normalizeText = (s) =>
-    typeof s === "string" ? s.replace(/\s+/g, " ").trim() : "";
-
-  const normalizeKey = (k) => (k === undefined || k === null ? "" : k);
-
-  const isSubstantiallyIdentical = (a, b) => {
-    const na = normalizeText(a).toLowerCase().replace(/[^a-z0-9 ]/g, "");
-    const nb = normalizeText(b).toLowerCase().replace(/[^a-z0-9 ]/g, "");
-    if (!na || !nb) return false;
-    return na === nb || na.includes(nb) || nb.includes(na);
-  };
-
-  const rawFindings = Array.isArray(parsed.findings)
-    ? parsed.findings
-    : Array.isArray(parsed.issues)
-    ? parsed.issues
-    : [];
-
-  const issues = rawFindings
-    .map((f) => {
-      if (typeof f !== "object" || f === null) return null;
-      const confidence = Number(f.confidence) || 0;
-      if (confidence < 0.75) return null;
-
-      const title = normalizeText(normalizeKey(f.title || f.message));
-      const explanation = normalizeText(normalizeKey(f.explanation || f.message));
-
-      if (!title || !explanation) return null;
-      if (isSubstantiallyIdentical(title, explanation)) return null;
-
-      return {
-        line: typeof f.line === "number" ? f.line : null,
-        severity: typeof f.severity === "string" ? f.severity : "info",
-        category: typeof f.category === "string" ? f.category : "maintainability",
-        title: normalizeKey(f.title || f.message),
-        explanation: normalizeKey(f.explanation || f.message),
-        why_it_matters: typeof f.why_it_matters === "string" ? f.why_it_matters : "",
-        suggested_fix: typeof f.suggested_fix === "string" ? f.suggested_fix : "",
-        example_code: typeof f.example_code === "string" ? f.example_code : "",
-        confidence,
-      };
-    })
-    .filter(Boolean);
-
-  const score =
-    typeof parsed.score === "object" && parsed.score !== null
-      ? {
-          security: Number(parsed.score.security) || 0,
-          readability: Number(parsed.score.readability) || 0,
-          performance: Number(parsed.score.performance) || 0,
-        }
-      : { security: 0, readability: 0, performance: 0 };
-
-  const summary =
-    typeof parsed.summary === "string" && parsed.summary.trim().length > 0
-      ? parsed.summary.trim()
-      : issues.length === 0
-      ? "No significant concerns detected."
-      : "";
-
-  // Map findings -> issues for backward compatibility with the UI
-  return { issues, score, summary };
-}
-
 function parseReviewResponse(rawText) {
   const jsonMatch = rawText.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
@@ -427,8 +322,7 @@ function parseReviewResponse(rawText) {
   }
 
   try {
-    const parsed = JSON.parse(jsonMatch[0]);
-    return normalizeFindings(parsed);
+    return JSON.parse(jsonMatch[0]);
   } catch {
     throw new Error("AI returned invalid JSON");
   }
@@ -549,8 +443,27 @@ function buildResult(owner, repo, pullNumber, prTitle, reviewableFiles, fileRevi
 }
 
 export async function POST(request) {
+  const session = await auth()
+
+  if (!session?.user?.email) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { email: session.user.email },
+    include: { accounts: true },
+  })
+
+  if (!user) {
+    return Response.json({ error: "User not found" }, { status: 401 })
+  }
+
+  console.log("User lookup result:", { found: !!user, accountCount: user?.accounts?.length, hasGithubAccount: !!user?.accounts?.find(a => a.provider === "github") })
+
   try {
     const { prUrl } = await request.json();
+
+    console.log("Review request received:", { prUrl, hasSession: !!session, userEmail: session?.user?.email })
 
     if (!prUrl) {
       return Response.json({ error: "No PR URL provided" }, { status: 400 });
@@ -563,14 +476,19 @@ export async function POST(request) {
 
     const [, owner, repo, pullNumber] = match;
 
+    const githubAccount = user.accounts?.find((a) => a.provider === "github");
+    const githubToken = githubAccount?.access_token || process.env.GITHUB_TOKEN;
+    const usingStaticGithubToken = !githubAccount?.access_token;
+
     const githubHeaders = {
       Accept: "application/vnd.github.v3+json",
       "User-Agent": "pr-reviewer-app",
     };
-    if (process.env.GITHUB_TOKEN) {
-      githubHeaders.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+    if (githubToken) {
+      githubHeaders.Authorization = `Bearer ${githubToken}`;
     }
 
+    // warm up rate limit / detect auth scope
     fetch(`${GITHUB_API_BASE}/rate_limit`, { headers: githubHeaders }).then((res) => res.json());
 
     const [githubRes, prRes] = await Promise.all([
@@ -584,6 +502,10 @@ export async function POST(request) {
       ),
     ]);
 
+    console.log("GitHub API response status:", githubRes.status)
+    const responseText = await githubRes.text()
+    console.log("GitHub API response body:", responseText)
+
     if (!githubRes.ok) {
       return Response.json(
         { error: "Could not fetch PR from GitHub. Is it a public repo?" },
@@ -591,7 +513,7 @@ export async function POST(request) {
       );
     }
 
-    const files = await githubRes.json();
+    const files = JSON.parse(responseText);
     const prData = prRes.ok ? await prRes.json() : null;
     const prTitle = prData?.title ?? `PR #${pullNumber}`;
     const baseBranch = prData?.base?.ref;
@@ -624,6 +546,7 @@ export async function POST(request) {
             type: "progress",
             files: filenames,
             filesReviewed: reviewableFiles.length,
+            usingStaticGithubToken: usingStaticGithubToken,
           });
 
           const fileReviews = [];
@@ -644,16 +567,60 @@ export async function POST(request) {
             send({ type: "fileComplete", filename: file.filename });
           }
 
+          const result = buildResult(
+            owner,
+            repo,
+            pullNumber,
+            prTitle,
+            reviewableFiles,
+            fileReviews
+          );
+
+          try {
+            const overallScore = Math.round(
+              (result.overallScore.security +
+                result.overallScore.readability +
+                result.overallScore.performance) /
+                3
+            );
+
+            await prisma.review.create({
+              data: {
+                userId: user.id,
+                prUrl,
+                prOwner: owner,
+                prRepo: repo,
+                prNumber: pullNumber,
+                prTitle,
+                filesReviewed: reviewableFiles.length,
+                securityScore: result.overallScore.security,
+                readabilityScore: result.overallScore.readability,
+                performanceScore: result.overallScore.performance,
+                overallScore,
+                totalIssues: result.summary.totalIssues,
+                criticalCount: result.summary.critical,
+                warningCount: result.summary.warnings,
+                infoCount: result.summary.info,
+                fileResults: {
+                  create: fileReviews.map((file) => ({
+                    filename: file.filename,
+                    summary: file.summary ?? null,
+                    issues: file.issues ?? [],
+                    securityScore: file.score?.security ?? null,
+                    readabilityScore: file.score?.readability ?? null,
+                    performanceScore: file.score?.performance ?? null,
+                    skipped: Boolean(file.skipped),
+                  })),
+                },
+              },
+            });
+          } catch (dbError) {
+            console.error("Failed to save review record", dbError);
+          }
+
           send({
             type: "done",
-            ...buildResult(
-              owner,
-              repo,
-              pullNumber,
-              prTitle,
-              reviewableFiles,
-              fileReviews
-            ),
+            ...result,
           });
         } catch (err) {
           send({ type: "error", error: err.message });
