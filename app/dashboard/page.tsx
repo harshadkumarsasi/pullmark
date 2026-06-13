@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { signOut } from "next-auth/react";
+import PostToGitHubButton from "../review/[id]/PostToGitHubButton";
 
 type ReviewScore = {
   security: number;
@@ -434,6 +435,9 @@ export default function DashboardPage() {
                   >
                     Share this review
                   </button>
+                  {result?.pr && (
+                    <PostToGitHubButton reviewId={currentReviewId} initialPostCount={0} />
+                  )}
                   {shareMessage && (
                     <p className="text-sm text-zinc-400">{shareMessage}</p>
                   )}

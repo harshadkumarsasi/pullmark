@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import SignInButton from "./SignInButton"
+import PostToGitHubButton from "./PostToGitHubButton"
 
 type ReviewFileResult = {
   id: string
@@ -26,6 +27,7 @@ type Review = {
   criticalCount: number
   warningCount: number
   infoCount: number
+  commentPostCount: number
   fileResults: ReviewFileResult[]
 }
 
@@ -176,7 +178,10 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
             })}
           </div>
 
-          <SignInButton />
+          <div className="mt-6 flex items-center gap-3">
+            {review.prUrl && <PostToGitHubButton reviewId={review.id} initialPostCount={review.commentPostCount} />}
+            <SignInButton />
+          </div>
         </div>
       </main>
     </div>
