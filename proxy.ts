@@ -6,9 +6,10 @@ export async function proxy(request) {
   const isLoggedIn = !!session
   const isLoginPage = request.nextUrl.pathname === "/login"
   const isAuthRoute = request.nextUrl.pathname.startsWith("/api/auth")
+  const isPublicRoute = request.nextUrl.pathname === "/"
 
   if (isAuthRoute) return NextResponse.next()
-  if (!isLoggedIn && !isLoginPage) {
+  if (!isLoggedIn && !isLoginPage && !isPublicRoute) {
     return NextResponse.redirect(new URL("/login", request.url))
   }
   if (isLoggedIn && isLoginPage) {
