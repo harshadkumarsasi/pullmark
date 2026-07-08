@@ -149,23 +149,23 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
                       <p className="text-sm text-zinc-400">No issues found.</p>
                     ) : (
                       <ul className="space-y-3">
-                        {issues.map((issue, index) => (
+                        {issues.filter(Boolean).map((issue, index) => (
                           <li
                             key={index}
                             className="rounded-md border border-white/10 bg-[#1a1a1a] p-4"
                           >
                             <div className="mb-2 flex flex-wrap items-center gap-2">
                               <span className="rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/90 bg-white/5">
-                                {issue.severity} · {issue.category}
+                                {issue?.severity} · {issue?.category}
                               </span>
-                              {issue.line != null && (
-                                <span className="font-mono text-xs text-zinc-500">line {issue.line}</span>
+                              {issue?.line != null && (
+                                <span className="font-mono text-xs text-zinc-500">line {issue?.line}</span>
                               )}
                             </div>
                             <div className="min-w-0">
-                              <p className="text-sm font-medium leading-6 text-white">{issue.message}</p>
-                              {issue.suggestion && (
-                                <p className="mt-2 text-sm leading-6 text-zinc-300">{issue.suggestion}</p>
+                              <p className="text-sm font-medium leading-6 text-white">{issue?.message}</p>
+                              {issue?.suggestion && (
+                                <p className="mt-2 text-sm leading-6 text-zinc-300">{issue?.suggestion}</p>
                               )}
                             </div>
                           </li>
