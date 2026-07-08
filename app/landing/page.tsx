@@ -178,9 +178,6 @@ export default function LandingPage() {
             <button onClick={() => scrollTo("how-it-works")} className={styles.navLink}>
               How it works
             </button>
-            <button onClick={() => scrollTo("pricing")} className={styles.navLink}>
-              Pricing
-            </button>
           </div>
           <Link href="/login" className={styles.navSignIn}>
             Sign in
@@ -391,37 +388,6 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* ─── Pricing ─── */}
-        <section id="pricing" className={styles.section}>
-          <div className={styles.sectionInner}>
-            <FadeInSection>
-              <div className={styles.pricingCard}>
-                <span className={styles.pricingBadge}>BETA</span>
-                <h2 className={styles.pricingTitle}>Free while in beta</h2>
-                <p className={styles.pricingDesc}>
-                  Full access to all features. No credit card required.
-                </p>
-                <ul className={styles.pricingBullets}>
-                  <li className={styles.pricingBullet}>
-                    <span className={styles.pricingBulletCheck}>✓</span>
-                    Security, readability & performance scores
-                  </li>
-                  <li className={styles.pricingBullet}>
-                    <span className={styles.pricingBulletCheck}>✓</span>
-                    GitHub comment bot included
-                  </li>
-                  <li className={styles.pricingBullet}>
-                    <span className={styles.pricingBulletCheck}>✓</span>
-                    Private repo support via OAuth
-                  </li>
-                </ul>
-                <Link href="/login" className={styles.pricingCta}>
-                  Get started free
-                </Link>
-              </div>
-            </FadeInSection>
-          </div>
-        </section>
 
         {/* ─── Footer ─── */}
         <footer className={styles.footer}>

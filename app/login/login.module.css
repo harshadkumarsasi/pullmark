@@ -1,0 +1,265 @@
+/* ─── Page Wrapper ─── */
+.pageWrapper {
+  position: relative;
+  min-height: 100vh;
+  background: #080B12;
+  overflow: hidden;
+}
+
+/* Animated gradient mesh background */
+.bgCanvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: #080B12;
+}
+
+.bgCanvas::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(600px circle at 20% 30%, rgba(26, 32, 64, 0.5) 0%, transparent 70%),
+    radial-gradient(500px circle at 80% 20%, rgba(21, 16, 42, 0.4) 0%, transparent 70%),
+    radial-gradient(400px circle at 50% 80%, rgba(26, 32, 64, 0.3) 0%, transparent 70%);
+  animation: drift 20s ease-in-out infinite alternate;
+}
+
+@keyframes drift {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(2%, -1%) scale(1.05);
+  }
+  66% {
+    transform: translate(-1%, 2%) scale(0.95);
+  }
+  100% {
+    transform: translate(1%, -2%) scale(1.02);
+  }
+}
+
+/* Dot grid overlay */
+.dotGrid {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.content {
+  position: relative;
+  z-index: 2;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+/* ─── Card ─── */
+.card {
+  position: relative;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 16px;
+  padding: 36px 32px;
+  max-width: 420px;
+  width: 100%;
+  box-shadow: 0 0 0 1px #ffffff08, 0 32px 64px #00000066;
+  animation: cardGlow 3s ease-in-out infinite;
+}
+
+@keyframes cardGlow {
+  0%, 100% {
+    box-shadow: 0 0 0 1px #ffffff08, 0 32px 64px #00000066, 0 0 0 0 rgba(79, 127, 255, 0.13);
+  }
+  50% {
+    box-shadow: 0 0 0 1px #ffffff08, 0 32px 64px #00000066, 0 0 0 0 rgba(79, 127, 255, 0.27);
+  }
+}
+
+.cardInner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+
+.logoBadge {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: #4F7FFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-syne), sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  color: #ffffff;
+  margin-bottom: 12px;
+}
+
+.heading {
+  font-family: var(--font-syne), sans-serif;
+  font-size: 24px;
+  font-weight: 700;
+  color: #ffffff;
+  text-align: center;
+  margin: 0 0 8px;
+}
+
+.subtext {
+  font-family: var(--font-inter), system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  color: #8892a4;
+  text-align: center;
+  line-height: 1.5;
+  margin: 0 0 24px;
+}
+
+
+/* ─── Buttons Container ─── */
+.buttonsContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+/* ─── GitHub Button ─── */
+.githubButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px;
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  color: #ffffff;
+  font-family: var(--font-inter), system-ui, sans-serif;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.githubButton:hover {
+  background: #30363d;
+  border-color: #8b949e;
+}
+
+/* ─── Google Button ─── */
+.googleButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px;
+  background: #1a1f2e;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  color: #ffffff;
+  font-family: var(--font-inter), system-ui, sans-serif;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.googleButton:hover {
+  background: #21293a;
+}
+
+/* ─── Different Account Link ─── */
+.differentAccount {
+  font-family: var(--font-inter), system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  color: #5a6480;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: none;
+  display: block;
+  margin: -4px 0 0;
+  width: 100%;
+  text-align: center;
+  transition: color 0.2s;
+}
+
+.differentAccount:hover {
+  color: #8892a4;
+  text-decoration: underline;
+}
+
+/* ─── Footer Text ─── */
+.footerText {
+  font-family: var(--font-inter), system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 400;
+  color: #5a6480;
+  text-align: center;
+  margin: 0;
+}
+
+/* ─── Blobs ─── */
+.blob1 {
+  position: absolute;
+  top: -20%;
+  left: -10%;
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, #1e3a5f44 0%, transparent 70%);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+  animation: drift1 20s ease-in-out infinite alternate;
+}
+
+.blob2 {
+  position: absolute;
+  bottom: -20%;
+  right: -10%;
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, #15102a66 0%, transparent 70%);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+  animation: drift2 25s ease-in-out infinite alternate;
+}
+
+@keyframes drift1 {
+  0% { transform: translate(0, 0); }
+  100% { transform: translate(60px, 40px); }
+}
+
+@keyframes drift2 {
+  0% { transform: translate(0, 0); }
+  100% { transform: translate(-40px, 60px); }
+}
+
+/* ─── Reduced Motion ─── */
+@media (prefers-reduced-motion: reduce) {
+  .bgCanvas::before {
+    animation: none;
+  }
+  .card {
+    animation: none;
+  }
+  .blob1,
+  .blob2 {
+    animation: none;
+  }
+}
