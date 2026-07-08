@@ -21,7 +21,7 @@ export default function LoginPage() {
             <div className={styles.logoBadge}>PR</div>
 
             {/* Heading */}
-            <h1 className={styles.heading}>Welcome to PRReview</h1>
+            <h1 className={styles.heading}>Welcome to Pullmark</h1>
             <p className={styles.subtext}>
               Connect your GitHub account to start reviewing pull requests.
             </p>

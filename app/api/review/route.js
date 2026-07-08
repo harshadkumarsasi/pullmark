@@ -482,7 +482,7 @@ export async function POST(request) {
 
     const githubHeaders = {
       Accept: "application/vnd.github.v3+json",
-      "User-Agent": "pr-reviewer-app",
+      "User-Agent": "pullmark-app",
     };
     if (githubToken) {
       githubHeaders.Authorization = `Bearer ${githubToken}`;

@@ -300,7 +300,7 @@ export default function DashboardPage() {
       <aside className="flex w-80 flex-col border-r border-white/10 bg-[#090909]">
         <div className="flex items-center justify-between border-b border-white/10 px-6 py-5">
           <div>
-            <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">PRReview</p>
+            <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Pullmark</p>
             <p className="mt-1 text-sm text-zinc-400">Your review history</p>
           </div>
           <button
@@ -321,7 +321,7 @@ export default function DashboardPage() {
             <span className="grid h-6 w-6 place-items-center rounded-md border border-white/10 bg-white text-xs font-bold text-black">
               PR
             </span>
-            PRReview
+            Pullmark
           </button>
           <button
             type="button"

@@ -5,7 +5,7 @@ import Link from "next/link"
 import styles from "./landing.module.css"
 
 const TYPED_TEXT =
-  "Took a look at this PR (overall score: 8/10 — security 9, readability 7, performance 8).\n\nOne thing worth fixing: missing input validation on the user ID parameter in api/users.js around line 34. This could allow unexpected values through to the database query.\n\nFound 4 other issues. Full review: https://prreview.dev/review/abc123"
+  "Took a look at this PR (overall score: 8/10 — security 9, readability 7, performance 8).\n\nOne thing worth fixing: missing input validation on the user ID parameter in api/users.js around line 34. This could allow unexpected values through to the database query.\n\nFound 4 other issues. Full review: https://pullmark.dev/review/abc123"
 
 function TypewriterDemo() {
   const [displayed, setDisplayed] = useState("")
@@ -71,7 +71,7 @@ function TypewriterDemo() {
         <div className={styles.avatarCircle}>PR</div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className={styles.commentHeader}>
-            <span className={styles.commentUsername}>prreview-bot</span>
+            <span className={styles.commentUsername}>pullmark-bot</span>
             <span className={styles.commentTime}>commented just now</span>
           </div>
           <div className={styles.commentBody} style={{ opacity: bodyOpacity }}>
@@ -170,7 +170,7 @@ export default function LandingPage() {
       <div className={styles.content}>
         {/* ─── Nav ─── */}
         <nav className={styles.nav}>
-          <span className={styles.navLogo}>PRReview</span>
+          <span className={styles.navLogo}>Pullmark</span>
           <div className={styles.navLinks}>
             <button onClick={() => scrollTo("features")} className={styles.navLink}>
               Features
@@ -340,7 +340,7 @@ export default function LandingPage() {
                     <div className={`${styles.dot} ${styles.dotGreen}`} />
                   </div>
                   <span className={styles.exampleTopBarTitle}>
-                    PRReview — AI Code Review
+                    Pullmark — AI Code Review
                   </span>
                 </div>
                 <div className={styles.exampleBody}>
@@ -381,7 +381,7 @@ export default function LandingPage() {
                   </div>
                 </div>
                 <div className={styles.exampleCaption}>
-                  Actual output from PRReview — reviewed in 4.2s
+                  Actual output from Pullmark — reviewed in 4.2s
                 </div>
               </div>
             </FadeInSection>
@@ -391,7 +391,7 @@ export default function LandingPage() {
 
         {/* ─── Footer ─── */}
         <footer className={styles.footer}>
-          <span className={styles.footerLeft}>PRReview</span>
+          <span className={styles.footerLeft}>Pullmark</span>
           <span className={styles.footerRight}>
             Built by{" "}
             <a href="https://github.com/harshadkumarsasi" target="_blank" rel="noopener noreferrer">

@@ -21,7 +21,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PRReview — AI Code Review for GitHub Pull Requests",
+  title: "Pullmark — AI Code Review for GitHub Pull Requests",
   description: "Paste a pull request URL. Get a structured review across security, readability, and performance — posted as a comment right on the PR.",
 };
 
