@@ -1,7 +1,7 @@
 import { auth } from "@/auth"
 import { NextResponse } from "next/server"
 
-export async function proxy(request) {
+export async function proxy(request: Request) {
   const session = await auth()
   const isLoggedIn = !!session
   const isLoginPage = request.nextUrl.pathname === "/login"
