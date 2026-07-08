@@ -2,6 +2,16 @@ import { prisma } from "@/lib/prisma"
 import SignInButton from "./SignInButton"
 import PostToGitHubButton from "./PostToGitHubButton"
 
+type Issue = {
+  severity: string
+  category: string
+  line?: number | null
+  message: string
+  suggestion?: string
+  title?: string
+  confidence?: number
+}
+
 type ReviewFileResult = {
   id: string
   filename: string
@@ -121,7 +131,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
 
           <div className="mt-8 space-y-4">
             {review.fileResults.map((file) => {
-              const issues = Array.isArray(file.issues) ? file.issues : []
+              const issues = (file.issues as Issue[]) ?? []
               const issueCount = issues.length
 
               return (
@@ -149,7 +159,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
                       <p className="text-sm text-zinc-400">No issues found.</p>
                     ) : (
                       <ul className="space-y-3">
-                        {issues.filter(Boolean).map((issue, index) => (
+                        {(file.issues as Issue[] ?? []).map((issue, index) => (
                           <li
                             key={index}
                             className="rounded-md border border-white/10 bg-[#1a1a1a] p-4"
