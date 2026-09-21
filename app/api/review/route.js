@@ -338,7 +338,7 @@ async function callGroq(prompt) {
         Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
       },
       body: JSON.stringify({
-        model: "llama-3.1-8b-instant",
+        model: "openai/gpt-oss-120b",
         messages: [{ role: "user", content: prompt }],
         temperature: 0,
       }),
@@ -390,7 +390,8 @@ async function reviewFile(file, context) {
       const parsed = parseReviewResponse(rawText);
       return { filename: file.filename, ...parsed };
     }
-  } catch {
+  } catch (err) {
+    console.error("AI review failed for file:", file.filename, err.status, err.message, err.response?.data);
     return {
       filename: file.filename,
       issues: [],
