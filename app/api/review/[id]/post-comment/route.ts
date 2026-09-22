@@ -7,7 +7,11 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
+  let userId: string | undefined
+  let githubAccountFound = false
+  let githubAccessTokenFound = false
 
+  try {
   const session = await auth()
   if (!session?.user?.email) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -20,8 +24,11 @@ export async function POST(
     where: { email: session.user.email },
     include: { accounts: true },
   })
+  userId = user?.id
 
   const githubAccount = user?.accounts?.find((a) => a.provider === "github")
+  githubAccountFound = Boolean(githubAccount)
+  githubAccessTokenFound = Boolean(githubAccount?.access_token)
   const githubToken = githubAccount?.access_token || process.env.GITHUB_TOKEN
 
   const review = await prisma.review.findUnique({
@@ -50,6 +57,11 @@ export async function POST(
     comment = await buildReviewComment(id)
   }
 
+  console.log("GitHub account selected for comment:", {
+    provider: githubAccount?.provider ?? null,
+    hasAccessToken: githubAccessTokenFound,
+  })
+
   const response = await fetch(
     `https://api.github.com/repos/${review.prOwner}/${review.prRepo}/issues/${review.prNumber}/comments`,
     {
@@ -76,4 +88,19 @@ export async function POST(
   })
 
   return Response.json({ success: true, commentPostCount: updatedReview.commentPostCount })
+  } catch (error: unknown) {
+    const errorRecord = error as { message?: unknown; status?: unknown }
+    console.error("Failed to post GitHub comment:", {
+      message: error instanceof Error ? error.message : String(error),
+      status: errorRecord.status,
+      userId,
+      reviewId: id,
+      githubAccountFound,
+      githubAccessTokenFound,
+    })
+    return new Response(JSON.stringify({ error: "Failed to post comment" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    })
+  }
 }
