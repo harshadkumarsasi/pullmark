@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { signOut } from "next-auth/react";
 import PostToGitHubButton from "../review/[id]/PostToGitHubButton";
+import styles from "./dashboard.module.css";
 
 type ReviewScore = {
   security: number;
@@ -56,12 +57,6 @@ type HistoryEntry = {
   result: ReviewResult;
 };
 
-const severityStyles: Record<string, string> = {
-  critical: "border-red-500/25 bg-red-500/10 text-red-300",
-  warning: "border-amber-400/25 bg-amber-400/10 text-amber-200",
-  info: "border-sky-400/25 bg-sky-400/10 text-sky-200",
-};
-
 function formatDate(timestamp: string | Date) {
   const date = timestamp instanceof Date ? timestamp : new Date(timestamp)
   if (isNaN(date.getTime())) return "Recently"
@@ -76,14 +71,65 @@ function formatScore(score: number) {
   return score.toFixed(1);
 }
 
-function scoreTone(score: number) {
-  if (score >= 8) return "border border-emerald-500/20 bg-emerald-500/10 text-emerald-200";
-  if (score >= 5) return "border border-amber-400/20 bg-amber-400/10 text-amber-200";
-  return "border border-rose-500/20 bg-rose-500/10 text-rose-200";
+const QUALITY_COLORS = {
+  strong: "#22c55e",
+  fair: "#f59e0b",
+  poor: "#ef4444",
+} as const;
+
+function scoreColor(score: number) {
+  if (score >= 8) return QUALITY_COLORS.strong;
+  if (score >= 6) return QUALITY_COLORS.fair;
+  return QUALITY_COLORS.poor;
+}
+
+function scoreQuality(score: number) {
+  if (score >= 8) return { label: "Strong", cls: styles.qualityBadgeStrong };
+  if (score >= 6) return { label: "Fair", cls: styles.qualityBadgeFair };
+  return { label: "Poor", cls: styles.qualityBadgePoor };
+}
+
+function scoreProgress(score: number) {
+  return Math.round(score * 10) + "%";
 }
 
 function reviewUrl(result: ReviewResult) {
   return `https://github.com/${result.pr.owner}/${result.pr.repo}/pull/${result.pr.pullNumber}`;
+}
+
+function getPillClass(severity: string, count: number) {
+  if (count === 0) return styles.issuePillZero;
+  if (severity === "critical") return styles.issuePillCritical;
+  if (severity === "warning") return styles.issuePillWarning;
+  return styles.issuePillInfo;
+}
+
+function getPillSmallClass(severity: string) {
+  if (severity === "critical") return styles.issuePillSmallCritical;
+  if (severity === "warning") return styles.issuePillSmallWarning;
+  return styles.issuePillSmallInfo;
+}
+
+function getSeverityIcon(severity: string) {
+  if (severity === "critical") {
+    return (
+      <svg width="12" height="12" viewBox="0 0 12 12">
+        <circle cx="6" cy="6" r="6" fill="#ef4444" />
+      </svg>
+    );
+  }
+  if (severity === "warning") {
+    return (
+      <svg width="12" height="12" viewBox="0 0 12 12">
+        <polygon points="6,1 11,10 1,10" fill="#f59e0b" />
+      </svg>
+    );
+  }
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12">
+      <circle cx="6" cy="6" r="4.5" fill="none" stroke="#6b9eff" strokeWidth="1.5" />
+    </svg>
+  );
 }
 
 export default function DashboardPage() {
@@ -295,68 +341,60 @@ export default function DashboardPage() {
     }
   }
 
+  const prNumber = result?.pr?.pullNumber;
+  const repoFull = result ? `${result.pr.owner}/${result.pr.repo}` : "";
+
   return (
-    <div className="flex min-h-screen overflow-hidden bg-[#070707] text-white">
-      <aside className="flex w-80 flex-col border-r border-white/10 bg-[#090909]">
-        <div className="flex items-center justify-between border-b border-white/10 px-6 py-5">
-          <div>
-            <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Pullmark</p>
-            <p className="mt-1 text-sm text-zinc-400">Your review history</p>
+    <div className={styles.container}>
+      <aside className={styles.sidebar}>
+        <div className={styles.sidebarTop}>
+          <div className={styles.logoRow}>
+            <div className={styles.logoLeft}>
+              <span className={styles.prBadge}>PR</span>
+              <span className={styles.brandText}>Pullmark</span>
+            </div>
           </div>
           <button
             type="button"
-            onClick={() => signOut({ callbackUrl: "/login" })}
-            className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-white transition hover:bg-white/10"
-          >
-            Sign out
-          </button>
-        </div>
-
-        <div className="border-b border-white/10 p-5">
-          <button
-            type="button"
             onClick={handleNewReview}
-            className="mb-5 flex w-full items-center gap-2 rounded-md px-1 py-1 text-left text-[15px] font-semibold tracking-tight text-white"
-          >
-            <span className="grid h-6 w-6 place-items-center rounded-md border border-white/10 bg-white text-xs font-bold text-black">
-              PR
-            </span>
-            Pullmark
-          </button>
-          <button
-            type="button"
-            onClick={handleNewReview}
-            className="w-full rounded-md border border-white/10 bg-white px-3 py-2 text-sm font-medium text-zinc-950 shadow-[0_1px_0_rgba(255,255,255,0.12)_inset] transition-colors hover:bg-zinc-200"
+            className={styles.newReviewBtn}
           >
             New review
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-2">
+        <div className={styles.historyLabel}>Recent reviews</div>
+
+        <div className={styles.sidebarContent}>
           {loadingHistory && history.length === 0 ? (
-            <p className="px-2 py-4 text-sm text-zinc-500">Loading review history…</p>
+            <p className={styles.loadingText}>Loading review history…</p>
           ) : history.length === 0 ? (
-            <p className="px-2 py-4 text-sm text-zinc-500">No reviews yet</p>
+            <p className={styles.emptyText}>No reviews yet</p>
           ) : (
-            <ul className="space-y-1">
+            <ul className={styles.historyList}>
               {history.map((entry) => (
                 <li key={entry.id}>
                   <button
                     type="button"
                     onClick={() => handleSelectHistory(entry)}
-                    className={`w-full rounded-lg px-3 py-2.5 text-left transition-colors ${
-                      activeId === entry.id
-                        ? "border border-white/10 bg-white/[0.08]"
-                        : "border border-transparent hover:bg-white/[0.04]"
+                    className={`${styles.historyItem} ${
+                      activeId === entry.id ? styles.historyItemActive : ""
                     }`}
                   >
-                    <p className="truncate text-sm font-medium text-zinc-100">
-                      {`${entry.prOwner}/${entry.prRepo}`}
-                    </p>
-                    <p className="mt-0.5 truncate text-xs text-zinc-500">
+                    <div className={styles.historyItemTop}>
+                      <span className={styles.historyBranchIcon}>
+                        <svg width="11" height="11" viewBox="0 0 16 16" fill="#44445a">
+                          <path d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5 0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75 0 01-.75.75h-4.5A.75.75 0 015 6.25v-.878zm3.75 7.378a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm3-8.75a.75.75 0 11-1.5 0 .75.75 0 011.5 0z"/>
+                        </svg>
+                      </span>
+                      <p className={styles.historyRepo}>
+                        {`${entry.prOwner}/${entry.prRepo}`}
+                      </p>
+                    </div>
+                    <p className={styles.historyTitle}>
                       {entry.prTitle ?? `PR #${entry.prNumber}`}
                     </p>
-                    <p className="mt-2 text-[11px] uppercase tracking-[0.16em] text-zinc-600">
+                    <p className={styles.historyDate}>
                       {formatDate(entry.createdAt)}
                     </p>
                   </button>
@@ -365,37 +403,53 @@ export default function DashboardPage() {
             </ul>
           )}
         </div>
+
+        <div className={styles.sidebarBottom}>
+          <div className={styles.sidebarBottomRow}>
+            <span className={styles.userAvatar}>?</span>
+            <div className={styles.sidebarBottomInfo}>
+              <span className={styles.userName}>Signed in</span>
+              <span className={styles.userEmail}>Guest</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => signOut({ callbackUrl: "/login" })}
+            className={styles.signOutBottomBtn}
+          >
+            Sign out
+          </button>
+        </div>
       </aside>
 
-      <div className="flex min-h-screen flex-1 flex-col bg-[#0d0d0d] text-zinc-100">
+      <div className={styles.mainArea}>
         <main
-          className={`flex flex-1 flex-col px-10 py-14 ${
-            result ? "items-stretch" : "items-center justify-center"
+          className={`${styles.mainInner} ${
+            result ? styles.mainInnerStretched : styles.mainInnerCentered
           }`}
-          style={{
-            backgroundImage: "radial-gradient(circle, #333 1px, transparent 1px)",
-            backgroundSize: "32px 32px",
-          }}
         >
           {result ? (
-            <div className="mx-auto w-full max-w-7xl">
-              <div className="mb-8">
-                <p className="mb-3 text-xs font-medium uppercase tracking-[0.18em] text-zinc-500">
-                  Review complete
-                </p>
-                <h1 className="max-w-4xl text-4xl font-semibold tracking-tight text-white">
+            <div className={styles.reviewContainer}>
+              <div className={styles.reviewHeader}>
+                {(result.pr.owner || result.pr.repo) && (
+                  <div className={styles.breadcrumbRow}>
+                    <span className={styles.breadcrumbRepo}>{repoFull}</span>
+                    <span className={styles.breadcrumbSep}>/</span>
+                    <span className={styles.breadcrumbPr}>#{prNumber}</span>
+                  </div>
+                )}
+                <h1 className={styles.reviewTitle}>
                   {result.pr.title}
                 </h1>
-                <p className="mt-3 break-all font-mono text-sm text-zinc-500">{reviewUrl(result)}</p>
               </div>
 
               {usingStaticGithubToken === true && (
-                <div className="mx-auto mt-6 max-w-4xl rounded-md border border-yellow-500/20 bg-yellow-500/5 px-4 py-3 text-sm text-amber-200">
+                <div className={styles.staticTokenNote}>
                   Note: using the static GitHub token. Private repositories require signing in with GitHub to review.
                 </div>
               )}
 
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className={styles.scoreGrid}>
                 {(
                   [
                     ["Security", result.overallScore.security],
@@ -403,35 +457,58 @@ export default function DashboardPage() {
                     ["Performance", result.overallScore.performance],
                     ["Overall", Math.round((result.overallScore.security + result.overallScore.readability + result.overallScore.performance) / 3)],
                   ] as const
-                ).map(([label, score]) => (
-                  <div key={label} className={`rounded-lg border p-4 shadow-sm ${scoreTone(score)}`}>
-                    <p className="text-xs font-medium uppercase tracking-[0.16em] text-zinc-400">{label}</p>
-                    <p className="mt-3 text-4xl font-semibold tracking-tight">
-                      {formatScore(score)}
-                      <span className="ml-1 text-base font-medium text-zinc-400">/10</span>
-                    </p>
-                  </div>
-                ))}
+                ).map(([label, score]) => {
+                  const quality = scoreQuality(score);
+                  return (
+                    <div key={label} className={styles.scoreCard}>
+                      <div className={styles.scoreCardTop}>
+                        <p className={styles.scoreLabel}>{label}</p>
+                        <span className={`${styles.qualityBadge} ${quality.cls}`}>
+                          {quality.label}
+                        </span>
+                      </div>
+                      <p className={styles.scoreValue} style={{ color: scoreColor(score) }}>
+                        {formatScore(score)}
+                        <span className={styles.scoreDenominator}>/10</span>
+                      </p>
+                      <div className={styles.progressBar}>
+                        <div
+                          className={styles.progressFill}
+                          style={{ width: scoreProgress(score), background: scoreColor(score) }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
-              <div className="mt-5 flex flex-wrap gap-2">
-                <span className="rounded-full border border-red-500/25 bg-red-500/10 px-3 py-1 text-sm font-medium text-red-300">
+              <div className={styles.issuePills}>
+                <span className={`${styles.issuePill} ${getPillClass("critical", result.summary.critical)}`}>
+                  <svg className={styles.issuePillIcon} width="10" height="10" viewBox="0 0 10 10">
+                    <circle cx="5" cy="5" r="5" fill={result.summary.critical > 0 ? "#ef4444" : "#44445a"} />
+                  </svg>
                   Critical {result.summary.critical}
                 </span>
-                <span className="rounded-full border border-amber-400/25 bg-amber-400/10 px-3 py-1 text-sm font-medium text-amber-200">
+                <span className={`${styles.issuePill} ${getPillClass("warning", result.summary.warnings)}`}>
+                  <svg className={styles.issuePillIcon} width="10" height="10" viewBox="0 0 10 10">
+                    <polygon points="5,1 9.5,9 0.5,9" fill={result.summary.warnings > 0 ? "#f59e0b" : "#44445a"} />
+                  </svg>
                   Warning {result.summary.warnings}
                 </span>
-                <span className="rounded-full border border-sky-400/25 bg-sky-400/10 px-3 py-1 text-sm font-medium text-sky-200">
+                <span className={`${styles.issuePill} ${getPillClass("info", result.summary.info)}`}>
+                  <svg className={styles.issuePillIcon} width="10" height="10" viewBox="0 0 10 10">
+                    <circle cx="5" cy="5" r="4" fill="none" stroke={result.summary.info > 0 ? "#6b9eff" : "#44445a"} strokeWidth="1.5" />
+                  </svg>
                   Info {result.summary.info}
                 </span>
               </div>
 
               {currentReviewId && (
-                <div className="mt-5 flex flex-col items-start gap-2 sm:flex-row sm:items-center">
+                <div className={styles.actionRow}>
                   <button
                     type="button"
                     onClick={copyReviewLink}
-                    className="rounded-md bg-white px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-zinc-200"
+                    className={styles.shareBtn}
                   >
                     Share this review
                   </button>
@@ -439,42 +516,61 @@ export default function DashboardPage() {
                     <PostToGitHubButton reviewId={currentReviewId} initialPostCount={0} />
                   )}
                   {shareMessage && (
-                    <p className="text-sm text-zinc-400">{shareMessage}</p>
+                    <span className={styles.shareMessage}>{shareMessage}</span>
                   )}
                 </div>
               )}
 
-              <div className="mt-8 space-y-3">
+              <div className={styles.filesHeader}>
+                <span className={styles.filesHeaderLabel}>Files reviewed</span>
+                <span className={styles.filesHeaderCount}>{result.fileReviews.length} files</span>
+              </div>
+
+              <div className={styles.fileCards}>
                 {result.fileReviews.map((file) => {
                   const isExpanded = activeFile === file.filename;
                   const issueCount = file.issues?.length ?? 0;
+                  const criticalCount = file.issues.filter(i => i.severity === "critical").length;
+                  const warningCount = file.issues.filter(i => i.severity === "warning").length;
+                  const infoCount = file.issues.filter(i => i.severity === "info").length;
 
                   return (
                     <div
                       key={file.filename}
-                      className="overflow-hidden rounded-lg border border-white/10 bg-[#1a1a1a] shadow-sm"
+                      className={styles.fileCard}
                     >
                       <button
                         type="button"
                         onClick={() => setActiveFile(isExpanded ? null : file.filename)}
-                        className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left hover:bg-white/[0.04]"
+                        className={styles.fileHeader}
                       >
-                        <span className="min-w-0">
-                          <span className="block truncate font-mono text-sm font-medium text-white">
-                            {file.filename}
+                        <span className={styles.fileHeaderLeft}>
+                          <span className={styles.fileHeaderFirstLine}>
+                            <span className={styles.fileIcon}>📄</span>
+                            <span className={styles.fileFilename}>
+                              {file.filename}
+                            </span>
                           </span>
                           {file.summary && (
-                            <span className="mt-1 block truncate text-sm text-zinc-400">
+                            <span className={styles.fileSummary}>
                               {file.summary}
                             </span>
                           )}
                         </span>
-                        <span className="flex shrink-0 items-center gap-3 text-sm text-zinc-400">
-                          <span>
-                            {issueCount} {issueCount === 1 ? "issue" : "issues"}
+                        <span className={styles.fileHeaderRight}>
+                          <span className={styles.issueDots}>
+                            {criticalCount > 0 && (
+                              <span style={{width: '18px', height: '18px', borderRadius: '50%', background: '#ef4444', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: '600', color: 'white', marginLeft: '3px'}}>{criticalCount}</span>
+                            )}
+                            {warningCount > 0 && (
+                              <span style={{width: '18px', height: '18px', borderRadius: '50%', background: '#f59e0b', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: '600', color: 'white', marginLeft: '3px'}}>{warningCount}</span>
+                            )}
+                            {infoCount > 0 && (
+                              <span style={{width: '18px', height: '18px', borderRadius: '50%', background: '#6b9eff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: '600', color: 'white', marginLeft: '3px'}}>{infoCount}</span>
+                            )}
                           </span>
                           <svg
-                            className={`h-4 w-4 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                            className={`${styles.fileChevron} ${isExpanded ? styles.fileChevronOpen : ""}`}
                             fill="none"
                             viewBox="0 0 24 24"
                             stroke="currentColor"
@@ -486,30 +582,30 @@ export default function DashboardPage() {
                       </button>
 
                       {isExpanded && (
-                        <div className="border-t border-white/10 bg-[#111111] px-4 py-4">
+                        <div className={styles.fileIssues}>
                           {issueCount === 0 ? (
-                            <p className="text-sm text-zinc-400">No issues found.</p>
+                            <p className={styles.noIssues}>No issues found.</p>
                           ) : (
-                            <ul className="space-y-3">
+                            <div>
                               {file.issues.map((issue, i) => (
-                                <li key={i} className="rounded-md border border-white/10 bg-[#1a1a1a] p-4">
-                                  <div className="mb-2 flex flex-wrap items-center gap-2">
-                                    <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] ${severityStyles[issue.severity]}`}>
-                                      {issue.severity} · {issue.category}
-                                    </span>
-                                    {issue.line != null && (
-                                      <span className="font-mono text-xs text-zinc-500">line {issue.line}</span>
+                                <div key={i} className={styles.issueItem}>
+                                  <div className={styles.issueIconCol}>
+                                    {getSeverityIcon(issue.severity)}
+                                  </div>
+                                  <div className={styles.issueContentCol}>
+                                    <p className={styles.issueMessage}>
+                                      {issue.message}
+                                      {issue.line != null && (
+                                        <span className={styles.issueLine}>L{issue.line}</span>
+                                      )}
+                                    </p>
+                                    {issue.suggestion && issue.suggestion.toLowerCase() !== "none" && (
+                                      <p className={styles.issueSuggestion}>{issue.suggestion}</p>
                                     )}
                                   </div>
-                                  <div className="min-w-0">
-                                    <p className="text-sm font-medium leading-6 text-white">{issue.message}</p>
-                                    {issue.suggestion && (
-                                      <p className="mt-2 text-sm leading-6 text-zinc-300">{issue.suggestion}</p>
-                                    )}
-                                  </div>
-                                </li>
+                                </div>
                               ))}
-                            </ul>
+                            </div>
                           )}
                         </div>
                       )}
@@ -518,22 +614,65 @@ export default function DashboardPage() {
                 })}
               </div>
             </div>
-          ) : (
-            <div className="w-full max-w-5xl">
-              <div className="text-center">
-                <p className="mb-4 text-xs font-medium uppercase tracking-[0.2em] text-zinc-500">
-                  Structured AI review for GitHub pull requests
-                </p>
-                <h1 className="text-5xl font-semibold tracking-tight text-white sm:text-6xl">Drop a PR URL.</h1>
-                <p className="mx-auto mt-6 max-w-2xl text-base leading-7 text-zinc-300 sm:text-lg">
-                  Get a focused review across security, readability, and performance with file-level findings ready for triage.
-                </p>
+          ) : loading ? (
+            <div className={styles.emptyState}>
+              <div className={styles.spinnerContainer}>
+                <div className={styles.spinner} />
+                <p className={styles.spinnerText}>Reviewing your PR…</p>
               </div>
+
+              {files.length > 0 && (
+                <div className={styles.loadingFiles}>
+                  <p className={styles.loadingLabel}>
+                    Reviewing {files.length} of {filesReviewed} files
+                  </p>
+                  <ul className={styles.fileList}>
+                    {files.map((filename) => {
+                      const isComplete = completedSet.has(filename);
+                      const isActive = filename === activeFile;
+
+                      return (
+                        <li key={filename} className={styles.fileItem}>
+                          <span
+                            className={`${styles.fileDot} ${
+                              isComplete
+                                ? styles.fileDotDone
+                                : isActive
+                                ? styles.fileDotActive
+                                : styles.fileDotPending
+                            }`}
+                          />
+                          <span className={styles.fileName}>{filename}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+
+              {error && (
+                <div className={styles.errorBox}>{error}</div>
+              )}
+            </div>
+          ) : (
+            <div className={styles.emptyState}>
+              <span className={styles.emptyBadge}>
+                AI-powered pull request review
+              </span>
+              <h1 className={styles.emptyHeadline}>Review any pull request{"\n"}in seconds</h1>
+              <p className={styles.emptySubtext}>
+                Paste any GitHub PR URL below to get a structured AI review across security, readability, and performance.
+              </p>
 
               <form
                 onSubmit={handleReview}
-                className="mx-auto mt-12 flex max-w-4xl overflow-hidden rounded-lg border border-white/10 bg-[#1a1a1a] p-1.5 shadow-sm focus-within:border-white/20 focus-within:ring-4 focus-within:ring-white/5"
+                className={styles.inputRow}
               >
+                <span className={styles.inputIcon}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00d4aa" strokeWidth="2">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                  </svg>
+                </span>
                 <input
                   type="url"
                   value={prUrl}
@@ -541,68 +680,26 @@ export default function DashboardPage() {
                   placeholder="https://github.com/owner/repo/pull/123"
                   required
                   disabled={loading}
-                  className="min-w-0 flex-1 bg-transparent px-5 py-4 font-mono text-sm text-white outline-none placeholder:text-zinc-500 disabled:opacity-50"
+                  className={styles.urlInput}
                 />
                 <button
                   type="submit"
                   disabled={loading}
-                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-white px-6 py-4 text-sm font-medium text-black transition-colors hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
+                  className={styles.submitBtn}
                 >
                   {loading && (
-                    <svg
-                      className="h-4 w-4 animate-spin"
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      aria-hidden="true"
-                    >
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      />
-                    </svg>
+                    <span className={styles.buttonSpinner} />
                   )}
-                  Review PR →
+                  Review →
                 </button>
               </form>
 
-              <div className="mx-auto mt-9 flex max-w-4xl flex-wrap justify-center gap-x-10 gap-y-3 text-center font-mono text-xs font-medium uppercase tracking-[0.12em] text-[#666]">
-                <p className="whitespace-nowrap">MAX FILES / PR: 30</p>
-                <p className="whitespace-nowrap">CATEGORIES: Security · Read · Perf</p>
-                <p className="whitespace-nowrap">OUTPUT: JSON · structured</p>
+              <div className={styles.inputMeta}>
+                Try it with a sample PR — just press Review.
               </div>
 
               {error && (
-                <p className="mt-5 rounded-md border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</p>
-              )}
-
-              {loading && files.length > 0 && (
-                <div className="mt-10 text-left">
-                  <p className="mb-3 text-sm font-medium text-zinc-400">
-                    Reviewing {files.length} of {filesReviewed} files
-                  </p>
-                  <ul className="space-y-2 rounded-lg border border-white/10 bg-[#1a1a1a] p-4 shadow-sm">
-                    {files.map((filename) => {
-                      const isComplete = completedSet.has(filename);
-                      const isActive = filename === activeFile;
-
-                      return (
-                        <li key={filename} className="flex items-center gap-3 font-mono text-sm text-zinc-300">
-                          {isComplete ? (
-                            <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
-                          ) : isActive ? (
-                            <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-white" />
-                          ) : (
-                            <span className="h-2 w-2 shrink-0 rounded-full bg-zinc-600" />
-                          )}
-                          <span className="truncate">{filename}</span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
+                <div className={styles.errorBox}>{error}</div>
               )}
             </div>
           )}
