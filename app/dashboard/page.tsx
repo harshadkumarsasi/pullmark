@@ -374,7 +374,9 @@ export default function DashboardPage() {
       <div className="flex h-screen min-h-0 min-w-0 flex-1 flex-col bg-[#0d0d0d] text-zinc-100">
         <main
           className={`flex flex-1 flex-col px-10 py-14 ${
-            result ? "items-stretch" : "items-center justify-center"
+            result
+              ? "min-h-0 overflow-y-auto items-stretch"
+              : "items-center justify-center"
           }`}
           style={{
             backgroundImage: "radial-gradient(circle, #333 1px, transparent 1px)",
