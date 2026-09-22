@@ -1,21 +1,28 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import EditCommentModal from "./EditCommentModal"
 
 export default function PostToGitHubButton({
   reviewId,
   initialPostCount = 0,
+  initialPostError = null,
 }: {
   reviewId: string
   initialPostCount?: number
+  initialPostError?: string | null
 }) {
   const [loading, setLoading] = useState(false)
   const [editLoading, setEditLoading] = useState(false)
   const [postCount, setPostCount] = useState(initialPostCount)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(initialPostError)
   const [modalOpen, setModalOpen] = useState(false)
   const [pendingComment, setPendingComment] = useState("")
+
+  useEffect(() => {
+    setPostCount(initialPostCount)
+    setError(initialPostError)
+  }, [reviewId, initialPostCount, initialPostError])
 
   const handlePost = async () => {
     setLoading(true)
@@ -28,11 +35,16 @@ export default function PostToGitHubButton({
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
-        throw new Error(data.error || "Failed to post comment")
+        throw new Error(
+          data.error === "LOCKED_CONVERSATION" || data.error === "PERMISSION_DENIED"
+            ? data.message
+            : data.error || "Failed to post comment"
+        )
       }
 
       const data = await res.json()
       setPostCount(data.commentPostCount)
+      setError(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to post comment")
     } finally {
@@ -68,6 +80,7 @@ export default function PostToGitHubButton({
 
   const handlePosted = useCallback((commentPostCount: number) => {
     setPostCount(commentPostCount)
+    setError(null)
   }, [])
 
   const btnStyle: React.CSSProperties = {
@@ -135,7 +148,7 @@ export default function PostToGitHubButton({
         </button>
         {postCount > 0 && (
           <span style={{ fontSize: "13px", color: "#a1a1aa" }}>
-            Posted to GitHub ({postCount}x)
+            PR review already posted
           </span>
         )}
       </div>

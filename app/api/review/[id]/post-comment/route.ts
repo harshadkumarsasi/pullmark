@@ -10,6 +10,7 @@ export async function POST(
   let userId: string | undefined
   let githubAccountFound = false
   let githubAccessTokenFound = false
+  let reviewLoaded = false
 
   try {
   const session = await auth()
@@ -42,6 +43,7 @@ export async function POST(
       headers: { "Content-Type": "application/json" },
     })
   }
+  reviewLoaded = true
 
   // Read optional custom comment from request body
   let comment: string
@@ -76,6 +78,41 @@ export async function POST(
   )
 
   if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}))
+    const githubMessage =
+      typeof errorData.message === "string" ? errorData.message : ""
+    const failureMessage =
+      response.status === 422 && githubMessage.toLowerCase().includes("locked")
+        ? "This PR's conversation is locked and only accepts comments from collaborators."
+        : response.status === 403
+          ? "You do not have permission to comment on this PR."
+          : "Failed to post comment"
+
+    await prisma.review.update({
+      where: { id },
+      data: { lastPostError: failureMessage },
+    })
+
+    if (response.status === 422 && githubMessage.toLowerCase().includes("locked")) {
+      return new Response(
+        JSON.stringify({
+          error: "LOCKED_CONVERSATION",
+          message: "This PR's conversation is locked and only accepts comments from collaborators.",
+        }),
+        { status: 422, headers: { "Content-Type": "application/json" } }
+      )
+    }
+
+    if (response.status === 403) {
+      return new Response(
+        JSON.stringify({
+          error: "PERMISSION_DENIED",
+          message: "You do not have permission to comment on this PR.",
+        }),
+        { status: 403, headers: { "Content-Type": "application/json" } }
+      )
+    }
+
     return new Response(JSON.stringify({ error: "Failed to post comment" }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
@@ -84,11 +121,18 @@ export async function POST(
 
   const updatedReview = await prisma.review.update({
     where: { id },
-    data: { commentPostCount: { increment: 1 } },
+    data: { commentPostCount: { increment: 1 }, lastPostError: null },
   })
 
   return Response.json({ success: true, commentPostCount: updatedReview.commentPostCount })
   } catch (error: unknown) {
+    if (reviewLoaded) {
+      await prisma.review.update({
+        where: { id },
+        data: { lastPostError: error instanceof Error ? error.message : String(error) },
+      })
+    }
+
     const errorRecord = error as { message?: unknown; status?: unknown }
     console.error("Failed to post GitHub comment:", {
       message: error instanceof Error ? error.message : String(error),

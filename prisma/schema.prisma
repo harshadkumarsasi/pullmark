@@ -72,6 +72,7 @@ model Review {
   infoCount        Int
   createdAt        DateTime     @default(now())
   commentPostCount Int          @default(0)
+  lastPostError    String?
   fileResults      FileResult[]
   user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

@@ -34,6 +34,8 @@ type ReviewResult = {
     title: string;
   };
   reviewId?: string;
+  commentPostCount: number;
+  lastPostError: string | null;
   filesReviewed: number;
   fileReviews: FileReview[];
   overallScore: ReviewScore;
@@ -213,7 +215,7 @@ export default function DashboardPage() {
             }
 
                   if (event.type === "done") {
-              setResult(event);
+                    setResult({ ...event, commentPostCount: 0, lastPostError: null });
               setCurrentReviewId(event.reviewId ?? null);
               await refreshHistory();
             }
@@ -249,6 +251,8 @@ export default function DashboardPage() {
         title: review.prTitle ?? `PR #${review.prNumber}`,
       },
       filesReviewed: review.filesReviewed,
+      commentPostCount: review.commentPostCount,
+      lastPostError: review.lastPostError,
       fileReviews: review.fileResults.map((file: any) => ({
         filename: file.filename,
         summary: file.summary,
@@ -296,8 +300,8 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="flex min-h-screen overflow-hidden bg-[#070707] text-white">
-      <aside className="flex w-80 flex-col border-r border-white/10 bg-[#090909]">
+    <div className="flex h-screen overflow-hidden bg-[#070707] text-white">
+      <aside className="flex h-screen min-h-0 w-80 flex-col border-r border-white/10 bg-[#090909]">
         <div className="flex items-center justify-between border-b border-white/10 px-6 py-5">
           <div>
             <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Pullmark</p>
@@ -332,7 +336,7 @@ export default function DashboardPage() {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-2">
+        <div className="min-h-0 flex-1 overflow-y-auto p-2">
           {loadingHistory && history.length === 0 ? (
             <p className="px-2 py-4 text-sm text-zinc-500">Loading review history…</p>
           ) : history.length === 0 ? (
@@ -367,7 +371,7 @@ export default function DashboardPage() {
         </div>
       </aside>
 
-      <div className="flex min-h-screen flex-1 flex-col bg-[#0d0d0d] text-zinc-100">
+      <div className="flex h-screen min-h-0 min-w-0 flex-1 flex-col bg-[#0d0d0d] text-zinc-100">
         <main
           className={`flex flex-1 flex-col px-10 py-14 ${
             result ? "items-stretch" : "items-center justify-center"
@@ -436,7 +440,11 @@ export default function DashboardPage() {
                     Share this review
                   </button>
                   {result?.pr && (
-                    <PostToGitHubButton reviewId={currentReviewId} initialPostCount={0} />
+                    <PostToGitHubButton
+                      reviewId={currentReviewId}
+                      initialPostCount={result.commentPostCount}
+                      initialPostError={result.lastPostError}
+                    />
                   )}
                   {shareMessage && (
                     <p className="text-sm text-zinc-400">{shareMessage}</p>

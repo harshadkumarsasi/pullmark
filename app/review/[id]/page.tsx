@@ -38,6 +38,7 @@ type Review = {
   warningCount: number
   infoCount: number
   commentPostCount: number
+  lastPostError: string | null
   fileResults: ReviewFileResult[]
 }
 
@@ -189,7 +190,13 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
           </div>
 
           <div className="mt-6 flex items-center gap-3">
-            {review.prUrl && <PostToGitHubButton reviewId={review.id} initialPostCount={review.commentPostCount} />}
+            {review.prUrl && (
+              <PostToGitHubButton
+                reviewId={review.id}
+                initialPostCount={review.commentPostCount}
+                initialPostError={review.lastPostError}
+              />
+            )}
             <SignInButton />
           </div>
         </div>

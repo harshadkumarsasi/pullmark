@@ -60,7 +60,11 @@ export default function EditCommentModal({
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
-        throw new Error(data.error || "Failed to post comment")
+        throw new Error(
+          data.error === "LOCKED_CONVERSATION" || data.error === "PERMISSION_DENIED"
+            ? data.message
+            : data.error || "Failed to post comment"
+        )
       }
 
       const data = await res.json()

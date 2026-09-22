@@ -34,6 +34,8 @@ export async function GET() {
       prRepo: review.prRepo,
       prNumber: review.prNumber,
       prTitle: review.prTitle,
+      commentPostCount: review.commentPostCount,
+      lastPostError: review.lastPostError,
       createdAt: review.createdAt,
       result: {
         pr: {
